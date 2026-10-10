@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-10
+
 ### Added
 
 - Tesla Wall Connector gen 3, read on the home network without any account:
@@ -27,4 +29,5 @@ the notes of the version's GitHub Release.
   the same feature, trigger and widget keys; the documentation explains how to
   move a charger from one integration to the other.
 
-[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/commits/main
+[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/guim31/gladys-tesla-wall-connector/releases/tag/v1.0.1
