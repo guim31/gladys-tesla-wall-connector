@@ -32,12 +32,14 @@ pushing.
 
 ```
 index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/runtime.js                    the chargers: polling, publication, triggers, search action
+src/devices/wallConnector.js      device blueprint and vitals → states mapping
+src/wallConnector/client.js       local HTTP client (firmware JSON quirks, size cap, no redirect)
+src/wallConnector/scan.js         search range parsing and the network sweep
+src/widgets.js                    dashboard widget handler (manifest `widgets`)
+src/triggers.js                   scene trigger keys and transitions (manifest `scene_triggers`)
+src/store.js                      small JSON persistence under /data
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
 docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
 test/                             node --test; test/helpers/fakeGladys.js stands in for the SDK
@@ -171,6 +173,37 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
 - Les filtres de scène ne font qu'égalité et appartenance : un seuil reste le travail d'un capteur.
 - **Les clés de widgets, de déclencheurs et d'actions sont figées une fois publiées.**
 - `gladys_version` `>=5.1.0` dès qu'il y a widgets, déclencheurs ou actions de scène.
+
+## Tesla Wall Connector (API locale)
+
+- Gen 3 seulement : `http://<ip>/api/1/vitals`, `/lifetime`, `/version`, `/wifi_status`, sans
+  authentification, en lecture seule. Le firmware écrit parfois `nan` (pas du JSON) et oublie
+  parfois l'accolade finale : réparer avant `JSON.parse`. Il peut mettre plusieurs secondes à
+  répondre (délai de 10 s).
+- Pas de puissance dans `vitals` : la calculer par phase (triphasé), ou tension réseau × courant
+  véhicule sur le biphasé nord-américain (réseau à 60 Hz ; Home Assistant le demande à
+  l'utilisateur).
+- Identifier la borne par son numéro de série (`/version`), jamais par son IP (DHCP).
+- Ce code vient de `guim31/gladys-tesla` 1.1.0. Les clés de fonctionnalités, de déclencheurs et
+  de widget sont restées les mêmes, mais **le cœur préfixe tout `external_id` par
+  `ext:<sélecteur de l'intégration>:`** (`ext-<owner>-<repo>`) : une borne passée d'une
+  intégration à l'autre est un nouvel appareil, son historique ne suit pas. La doc le dit.
+
+## Découverte des bornes
+
+- La borne ne s'annonce ni en mDNS ni en SSDP : `network_discovery` (le cœur capte pour le
+  conteneur) ne sert à rien ici, et le cœur refuse tout balayage unicast par procuration.
+- Le conteneur est sur le pont `gladys-integrations` (172.30.0.0/24) : il ne voit pas le
+  réseau local de Gladys, et aucune API hôte ne le donne. L'unicast vers le LAN passe (NAT) :
+  la recherche balaie donc elle-même une plage (connexion TCP au port 80, puis
+  `/api/1/version` + `/api/1/vitals` sur les ports ouverts), adresses privées seulement,
+  1 024 au plus.
+- La plage vient de la configuration ; le bloc `section` qui la précède affiche
+  `{{gladys_host}}` (substitué par le front 5.1.4 dans les textes de `section` seulement : ni
+  dans un `placeholder`, ni dans une `description` de champ).
+- Un `POST /config` de l'intégration ne renvoie **pas** de `config-updated` : appliquer
+  soi-même la nouvelle configuration. Le formulaire ouvert dans le navigateur garde
+  l'ancienne valeur : le message d'action demande de recharger la page.
 
 ## Store
 

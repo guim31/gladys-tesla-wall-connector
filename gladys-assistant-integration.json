@@ -1,177 +1,326 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Tesla Wall Connector",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Tesla Wall Connector gen 3 read on your home network: power, energy, charge state.",
+    "fr": "Borne Tesla Wall Connector gen 3 lue sur le réseau local : puissance, énergie, charge."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-tesla-wall-connector:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-tesla-wall-connector/main/cover.png",
+  "categories": ["energy"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
-      "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+      "label": {
+        "en": "Before you start",
+        "fr": "Avant de commencer"
       },
-      "links": [
+      "description": {
+        "en": "For the Tesla Wall Connector gen 3 (the Wi-Fi model). It is read directly on your home network: no Tesla account, no cloud, no subscription. The charger must be connected to your Wi-Fi (Tesla One app).\nType its IP address below, or press “Search for Wall Connectors” at the bottom of this page. Give it a fixed address in your router, so it keeps the same one.",
+        "fr": "Pour la borne Tesla Wall Connector gen 3 (le modèle Wi-Fi). Elle est lue directement sur votre réseau local : ni compte Tesla, ni cloud, ni abonnement. La borne doit être connectée à votre Wi-Fi (application Tesla One).\nSaisissez son adresse IP ci-dessous, ou cliquez sur « Rechercher les bornes » en bas de cette page. Fixez-lui une adresse dans votre box, pour qu’elle garde toujours la même."
+      }
+    },
+    {
+      "key": "wall_connectors",
+      "type": "string",
+      "label": {
+        "en": "Wall Connector addresses",
+        "fr": "Adresses des bornes"
+      },
+      "description": {
+        "en": "IP address (or host name) of each Wall Connector, separated by commas. Filled in by the search too.",
+        "fr": "Adresse IP (ou nom d’hôte) de chaque borne, séparées par des virgules. Remplie aussi par la recherche."
+      },
+      "placeholder": {
+        "en": "e.g. 192.168.1.50",
+        "fr": "ex. 192.168.1.50"
+      },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "search_help",
+      "type": "section",
+      "label": {
+        "en": "Searching the network",
+        "fr": "Recherche sur le réseau"
+      },
+      "description": {
+        "en": "The charger does not announce itself on the network, so the search tries each address of a range. The integration runs in an isolated container and cannot see which network Gladys is on: give that range below.\nYour browser reaches Gladys at {{gladys_host}}. If that is an address like 192.168.1.20, the range is 192.168.1.0/24 (every address from 192.168.1.1 to 192.168.1.254). Left empty, the search tries the network of the chargers already configured, else 192.168.1.0/24 and 192.168.0.0/24, the most common home networks.",
+        "fr": "La borne ne s’annonce pas sur le réseau : la recherche essaie donc chaque adresse d’une plage. L’intégration tourne dans un conteneur isolé et ne peut pas voir sur quel réseau est Gladys : indiquez cette plage ci-dessous.\nVotre navigateur joint Gladys à l’adresse {{gladys_host}}. Si c’est une adresse comme 192.168.1.20, la plage est 192.168.1.0/24 (toutes les adresses de 192.168.1.1 à 192.168.1.254). Laissée vide, la recherche essaie le réseau des bornes déjà configurées, sinon 192.168.1.0/24 et 192.168.0.0/24, les réseaux domestiques les plus courants."
+      }
+    },
+    {
+      "key": "scan_range",
+      "type": "string",
+      "label": {
+        "en": "Search range",
+        "fr": "Plage de recherche"
+      },
+      "description": {
+        "en": "A network (192.168.1.0/24), a range (192.168.1.10-192.168.1.60) or addresses, separated by commas. Private addresses only, 1,024 at most.",
+        "fr": "Un réseau (192.168.1.0/24), une plage (192.168.1.10-192.168.1.60) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus."
+      },
+      "placeholder": {
+        "en": "e.g. 192.168.1.0/24",
+        "fr": "ex. 192.168.1.0/24"
+      },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "units",
+      "type": "select",
+      "label": {
+        "en": "Temperature unit",
+        "fr": "Unité de température"
+      },
+      "description": {
+        "en": "Unit of the handle temperature, as scenes compare it. The dashboard always converts to each user's preference.",
+        "fr": "Unité de la température de la poignée, telle que les scènes la comparent. Le tableau de bord convertit toujours selon la préférence de chacun."
+      },
+      "required": false,
+      "default": "auto",
+      "options": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "value": "auto",
+          "label": {
+            "en": "Automatic (°F on a 60 Hz grid, else °C)",
+            "fr": "Automatique (°F sur un réseau 60 Hz, sinon °C)"
+          }
+        },
+        {
+          "value": "metric",
+          "label": {
+            "en": "°C",
+            "fr": "°C"
+          }
+        },
+        {
+          "value": "imperial",
+          "label": {
+            "en": "°F",
+            "fr": "°F"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
+      "key": "language",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
-    },
-    {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "label": {
+        "en": "Device names language",
+        "fr": "Langue des noms d'appareils"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds.",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes."
+        "en": "Language of the feature names given to new devices (Gladys keeps a name once the device is created).",
+        "fr": "Langue des noms de fonctionnalités des nouveaux appareils (Gladys garde un nom une fois l'appareil créé)."
       },
       "required": false,
-      "default": 300,
-      "min": 30,
-      "max": 3600
+      "default": "en",
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
+      "key": "scan_wall_connectors",
+      "label": {
+        "en": "Search for Wall Connectors",
+        "fr": "Rechercher les bornes"
+      },
+      "description": {
+        "en": "Tries each address of the search range (up to a minute) and adds the chargers found to the configuration.",
+        "fr": "Essaie chaque adresse de la plage de recherche (jusqu’à une minute) et ajoute les bornes trouvées à la configuration."
+      },
+      "timeout_seconds": 120
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "test_wall_connector",
+      "label": {
+        "en": "Test the Wall Connectors",
+        "fr": "Tester les bornes"
+      },
+      "description": {
+        "en": "Reads each configured address on the home network and shows what answers.",
+        "fr": "Interroge chaque adresse configurée sur le réseau local et affiche ce qui répond."
+      },
+      "timeout_seconds": 60
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "wall_connector_plugged",
+      "label": {
+        "en": "Wall Connector: car plugged in",
+        "fr": "Wall Connector : voiture branchée"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "A car was plugged into the Wall Connector.",
+        "fr": "Une voiture a été branchée sur la Wall Connector."
       },
       "fields": [
         {
           "key": "device",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "label": {
+            "en": "Wall Connector",
+            "fr": "Borne Wall Connector"
+          }
         }
       ],
       "variables": [
         {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "key": "session_energy",
+          "type": "number",
+          "label": {
+            "en": "Session energy (kWh)",
+            "fr": "Énergie de la session (kWh)"
+          }
         }
       ]
-    }
-  ],
-  "scene_actions": [
+    },
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "wall_connector_unplugged",
+      "label": {
+        "en": "Wall Connector: car unplugged",
+        "fr": "Wall Connector : voiture débranchée"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "The car was unplugged from the Wall Connector.",
+        "fr": "La voiture a été débranchée de la Wall Connector."
+      },
       "fields": [
         {
           "key": "device",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "label": {
+            "en": "Wall Connector",
+            "fr": "Borne Wall Connector"
+          }
         }
       ],
-      "outputs": [
+      "variables": [
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "session_energy",
+          "type": "number",
+          "label": {
+            "en": "Session energy (kWh)",
+            "fr": "Énergie de la session (kWh)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "wall_connector_charging_started",
+      "label": {
+        "en": "Wall Connector started charging",
+        "fr": "La Wall Connector a commencé à charger"
+      },
+      "description": {
+        "en": "The Wall Connector starts or resumes delivering power.",
+        "fr": "La Wall Connector commence ou reprend la charge."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Wall Connector",
+            "fr": "Borne Wall Connector"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "session_energy",
+          "type": "number",
+          "label": {
+            "en": "Session energy (kWh)",
+            "fr": "Énergie de la session (kWh)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "wall_connector_charging_finished",
+      "label": {
+        "en": "Wall Connector charging finished",
+        "fr": "Charge de la Wall Connector terminée"
+      },
+      "description": {
+        "en": "The car plugged into the Wall Connector finished charging.",
+        "fr": "La voiture branchée sur la Wall Connector a fini de charger."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Wall Connector",
+            "fr": "Borne Wall Connector"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "session_energy",
+          "type": "number",
+          "label": {
+            "en": "Session energy (kWh)",
+            "fr": "Énergie de la session (kWh)"
+          }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "wall_connector",
+      "label": {
+        "en": "Tesla Wall Connector",
+        "fr": "Borne Tesla Wall Connector"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "Charging power, session and total energy, state of the charger and of the plugged car.",
+        "fr": "Puissance de charge, énergie de la session et totale, état de la borne et du véhicule."
+      },
+      "icon": "zap",
+      "settings": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Wall Connector",
+            "fr": "Borne Wall Connector"
+          },
+          "required": true
+        }
+      ]
     }
   ]
 }
