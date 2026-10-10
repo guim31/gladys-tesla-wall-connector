@@ -12,28 +12,19 @@ the notes of the version's GitHub Release.
 
 ### Added
 
-- A working example of scene triggers, scene actions and dashboard widgets
-  (Gladys 5.1.0 or later).
-- `CHANGELOG.md`, rolled by the Release workflow.
-- A GitHub Release for every version, with its changelog section as notes: the
-  Gladys Supervision page links each version to the repository's releases.
-- CI runs the tests on Node 22 and 24, and builds the Docker image.
-- Dependabot keeps the npm dependencies and the GitHub Actions up to date.
-- `SECURITY.md` (how to report a vulnerability) and `CLAUDE.md` (project rules
-  for contributors and coding assistants).
-- Manifest tests: `version` matches `package.json`, `docker_image` is tagged
-  with it, descriptions hold 10 to 100 characters, placeholders are
-  multi-language objects.
-- The latitude and longitude fields show an example value as placeholder.
+- Tesla Wall Connector gen 3, read on the home network without any account:
+  connector and charging state, status in words, charging power, session
+  energy, total energy delivered (kWh index for the energy monitoring), grid
+  voltage, vehicle current and handle temperature. Read every 15 seconds, only
+  changes are sent; flagged unreachable after three missed reads.
+- Scene triggers: car plugged in, car unplugged, charging started, charging
+  finished, with the session energy.
+- Dashboard widget "Tesla Wall Connector".
+- "Search for Wall Connectors": finds the chargers on a range of the home
+  network and adds them to the configuration.
+- "Test the Wall Connectors": what each configured address answers.
+- The Wall Connector support of the Tesla integration 1.1.0 moves here, with
+  the same feature, trigger and widget keys; the documentation explains how to
+  move a charger from one integration to the other.
 
-### Changed
-
-- Node.js 22 or later is required (Node 20 is end-of-life).
-
-### Fixed
-
-- The release commit no longer fails `npm run format:check`: the Release
-  workflow updates the manifest `version` and `docker_image` in place instead
-  of re-printing the whole file with `jq`.
-
-[Unreleased]: https://github.com/GladysAssistant/integration-template-js/commits/main
+[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/commits/main
