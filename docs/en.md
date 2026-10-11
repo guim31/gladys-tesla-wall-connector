@@ -47,7 +47,7 @@ the new one (or search again) and the same device carries on, with its history.
 | **Wall Connector addresses** | IP address (or host name) of each charger, separated by commas. The search fills it in too.                                                                                                                         |
 | **Search range (advanced)**  | Usually left empty: the search takes the network of Gladys. Otherwise a network (`192.168.1.0/24`), a range (`192.168.1.10-192.168.1.60`) or addresses, separated by commas. Private addresses only, 1,024 at most. |
 | **Temperature unit**         | Unit of the handle temperature as scenes compare it: automatic (°F on a North American charger, else °C), °C or °F. The dashboard always converts.                                                                  |
-| **Device names language**    | English or French feature names for new devices. Gladys keeps a feature's name once the device is created.                                                                                                          |
+| **Device names language**    | English, French, German or Spanish feature names for new devices. Gladys keeps a feature's name once the device is created.                                                                                         |
 
 ## Automatic search
 
@@ -88,16 +88,16 @@ the result shows **in red**, with what to check.
 
 ## What you get
 
-| Feature                | Details                                                          |
-| ---------------------- | ---------------------------------------------------------------- |
-| Connector              | Available, occupied (a car is plugged in), unavailable, faulted  |
-| Charging state         | Charging, vehicle connected, paused (car or charger), idle       |
-| Status                 | The charger's own state in words (see [States](#charger-states)) |
-| Charging power         | W                                                                |
-| Session energy         | kWh delivered since the car was plugged in                       |
-| Total energy delivered | Cumulative index in kWh, for the energy monitoring of Gladys     |
-| Grid voltage, current  | V, A                                                             |
-| Handle temperature     | °C or °F (**Temperature unit** setting)                          |
+| Feature                | Details                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| Connector              | Available, occupied (a car is plugged in), unavailable, faulted                                   |
+| Charging state         | Charging, vehicle connected, paused (car or charger), idle (also as soon as the car is unplugged) |
+| Status                 | The charger's own state in words (see [States](#charger-states))                                  |
+| Charging power         | W                                                                                                 |
+| Session energy         | kWh delivered since the car was plugged in                                                        |
+| Total energy delivered | Cumulative index in kWh, for the energy monitoring of Gladys                                      |
+| Grid voltage, current  | V, A                                                                                              |
+| Handle temperature     | °C or °F (**Temperature unit** setting)                                                           |
 
 Everything is read-only: the charger's local API does not start, stop or limit
 a charge (do it from the car or the Tesla app).
@@ -105,6 +105,23 @@ a charge (do it from the car or the Tesla app).
 The charger is read every **15 seconds** (the total counter every minute), and
 only what changes is sent to Gladys. After three missed reads in a row, the
 charger shows as **unreachable** (badge on the device).
+
+**History.** Gladys keeps every value it receives. The grid voltage, the
+current, the handle temperature and the power move a little at every read, so
+they are sent only when they change significantly since the last value sent:
+
+| Measurement        | Sent when it moves by                                           |
+| ------------------ | --------------------------------------------------------------- |
+| Charging power     | 50 W, or 2 % during a charge (150 W at 7.4 kW); and back to 0 W |
+| Vehicle current    | 0.5 A; and back to 0 A                                          |
+| Grid voltage       | 2 V                                                             |
+| Handle temperature | 1 °C (1.8 °F)                                                   |
+
+Each one is also sent again **once an hour**, even if it did not move, so
+Gladys never sees it as stale. Expect a few dozen values a day for each of
+them, plus some during a charge, instead of one every 15 seconds (5,760 a
+day). The widget's power and current tiles show these values; its energy rows
+are read directly from the charger.
 
 The charger reports voltages and currents, not the power: it is computed phase
 by phase (three-phase in Europe), or as voltage × current on a North American
@@ -152,15 +169,20 @@ them in two widgets, or tick the main meter alone for the house total.
 The **Tesla Wall Connector** widget (Gladys 5.1+), set with the charger to
 show:
 
-- at the top, what moves live: charging **power** and **current**;
+- at the top, two tiles side by side: charging **power** and **current**;
 - below, the energy: **This session** while a car is plugged in, **Last
   session** otherwise (the charger keeps the energy of the finished session),
-  and the **Total** delivered, rounded to fit its tile (in MWh above 1,000 kWh;
-  the feature keeps the exact value);
+  and the **Total** delivered, rounded (in MWh above 1,000 kWh; the feature
+  keeps the exact value);
 - the state of the charger and of the car and, with a car plugged in,
   **Plugged in for** (counted by the charger from the plug-in) and **Charging
   time** (followed by the integration: the time the charger actually delivered
   power during this plug-in, reset when the car is unplugged).
+
+The energy is shown as rows under the tiles, not as two more tiles: Gladys
+5.1.4 puts all the tiles of a widget in a single row that wraps after three of
+them, and has no setting for the number of columns, so four tiles would show
+as three plus one.
 
 No button: the local API is read-only.
 

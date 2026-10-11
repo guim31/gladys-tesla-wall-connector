@@ -4,10 +4,11 @@
 // so the rest of the code never deals with `undefined` or form strings.
 // -----------------------------------------------------------------------------
 
+import { LANGUAGES } from './i18n.js';
 import { parseHosts } from './wallConnector/client.js';
 
 export const UNIT_SYSTEMS = { AUTO: 'auto', METRIC: 'metric', IMPERIAL: 'imperial' };
-export const LANGUAGES = ['en', 'fr'];
+export { LANGUAGES };
 
 export const DEFAULT_CONFIG = {
   wall_connectors: '',

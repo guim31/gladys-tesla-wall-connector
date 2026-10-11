@@ -4,7 +4,9 @@
   "name": "Tesla Wall Connector",
   "description": {
     "en": "Tesla Wall Connector gen 3 read on your home network: power, energy, charge state.",
-    "fr": "Borne Tesla Wall Connector gen 3 lue sur le réseau local : puissance, énergie, charge."
+    "fr": "Borne Tesla Wall Connector gen 3 lue sur le réseau local : puissance, énergie, charge.",
+    "de": "Tesla Wall Connector Gen 3, im lokalen Netzwerk gelesen: Leistung, Energie, Ladestatus.",
+    "es": "Tesla Wall Connector gen 3 leído en su red local: potencia, energía, estado de carga."
   },
   "version": "1.1.0",
   "docker_image": "ghcr.io/guim31/gladys-tesla-wall-connector:1.1.0",
@@ -24,11 +26,15 @@
       "type": "section",
       "label": {
         "en": "Before you start",
-        "fr": "Avant de commencer"
+        "fr": "Avant de commencer",
+        "de": "Bevor du beginnst",
+        "es": "Antes de empezar"
       },
       "description": {
         "en": "For the Tesla Wall Connector gen 3 (the Wi-Fi model). It is read directly on your home network: no Tesla account, no cloud, no subscription. The charger must be connected to your Wi-Fi (Tesla One app).\nType its IP address below, or press “Search for Wall Connectors” at the bottom of this page. Give it a fixed address in your router, so it keeps the same one.",
-        "fr": "Pour la borne Tesla Wall Connector gen 3 (le modèle Wi-Fi). Elle est lue directement sur votre réseau local : ni compte Tesla, ni cloud, ni abonnement. La borne doit être connectée à votre Wi-Fi (application Tesla One).\nSaisissez son adresse IP ci-dessous, ou cliquez sur « Rechercher les bornes » en bas de cette page. Fixez-lui une adresse dans votre box, pour qu’elle garde toujours la même."
+        "fr": "Pour la borne Tesla Wall Connector gen 3 (le modèle Wi-Fi). Elle est lue directement sur votre réseau local : ni compte Tesla, ni cloud, ni abonnement. La borne doit être connectée à votre Wi-Fi (application Tesla One).\nSaisissez son adresse IP ci-dessous, ou cliquez sur « Rechercher les bornes » en bas de cette page. Fixez-lui une adresse dans votre box, pour qu’elle garde toujours la même.",
+        "de": "Für den Tesla Wall Connector Gen 3 (das WLAN-Modell). Er wird direkt in deinem lokalen Netzwerk gelesen: kein Tesla-Konto, keine Cloud, kein Abo. Die Ladestation muss mit deinem WLAN verbunden sein (App Tesla One).\nGib unten ihre IP-Adresse ein oder klicke unten auf dieser Seite auf „Wall Connectors suchen“. Gib ihr in deinem Router eine feste Adresse, damit sie immer dieselbe behält.",
+        "es": "Para el Tesla Wall Connector gen 3 (el modelo wifi). Se lee directamente en su red local: sin cuenta Tesla, sin nube, sin suscripción. El cargador debe estar conectado a su wifi (aplicación Tesla One).\nIntroduzca su dirección IP más abajo o pulse «Buscar Wall Connectors» al final de esta página. Asígnele una dirección fija en su router para que conserve siempre la misma."
       }
     },
     {
@@ -36,15 +42,21 @@
       "type": "string",
       "label": {
         "en": "Wall Connector addresses",
-        "fr": "Adresses des bornes"
+        "fr": "Adresses des bornes",
+        "de": "Adressen der Wall Connectors",
+        "es": "Direcciones de los Wall Connectors"
       },
       "description": {
         "en": "IP address (or host name) of each Wall Connector, separated by commas. Filled in by the search too.",
-        "fr": "Adresse IP (ou nom d’hôte) de chaque borne, séparées par des virgules. Remplie aussi par la recherche."
+        "fr": "Adresse IP (ou nom d’hôte) de chaque borne, séparées par des virgules. Remplie aussi par la recherche.",
+        "de": "IP-Adresse (oder Hostname) jedes Wall Connectors, durch Kommas getrennt. Wird auch von der Suche ausgefüllt.",
+        "es": "Dirección IP (o nombre de host) de cada Wall Connector, separadas por comas. La búsqueda también la rellena."
       },
       "placeholder": {
         "en": "e.g. 192.168.1.50",
-        "fr": "ex. 192.168.1.50"
+        "fr": "ex. 192.168.1.50",
+        "de": "z. B. 192.168.1.50",
+        "es": "p. ej. 192.168.1.50"
       },
       "required": false,
       "default": ""
@@ -54,11 +66,15 @@
       "type": "section",
       "label": {
         "en": "Searching the network (advanced)",
-        "fr": "Recherche sur le réseau (avancé)"
+        "fr": "Recherche sur le réseau (avancé)",
+        "de": "Suche im Netzwerk (erweitert)",
+        "es": "Búsqueda en la red (avanzado)"
       },
       "description": {
         "en": "The charger does not announce itself on the network, so the search tries each address of the network Gladys is on: Gladys asks the devices of your home network (internet box, TV…) to answer an SSDP search and deduces the network from their addresses. It also tries the network of the chargers already configured.\nOnly if your charger is on another network, give the range below. Your browser reaches Gladys at {{gladys_host}}: if that is an address like 192.168.1.20, the range of that network is 192.168.1.0/24 (every address from 192.168.1.1 to 192.168.1.254).",
-        "fr": "La borne ne s’annonce pas sur le réseau : la recherche essaie donc chaque adresse du réseau de Gladys. Gladys demande aux appareils de votre réseau local (box internet, télévision…) de répondre à une recherche SSDP et en déduit le réseau d’après leurs adresses. Elle essaie aussi le réseau des bornes déjà configurées.\nSeulement si votre borne est sur un autre réseau, indiquez la plage ci-dessous. Votre navigateur joint Gladys à l’adresse {{gladys_host}} : si c’est une adresse comme 192.168.1.20, la plage de ce réseau est 192.168.1.0/24 (toutes les adresses de 192.168.1.1 à 192.168.1.254)."
+        "fr": "La borne ne s’annonce pas sur le réseau : la recherche essaie donc chaque adresse du réseau de Gladys. Gladys demande aux appareils de votre réseau local (box internet, télévision…) de répondre à une recherche SSDP et en déduit le réseau d’après leurs adresses. Elle essaie aussi le réseau des bornes déjà configurées.\nSeulement si votre borne est sur un autre réseau, indiquez la plage ci-dessous. Votre navigateur joint Gladys à l’adresse {{gladys_host}} : si c’est une adresse comme 192.168.1.20, la plage de ce réseau est 192.168.1.0/24 (toutes les adresses de 192.168.1.1 à 192.168.1.254).",
+        "de": "Die Ladestation meldet sich nicht im Netzwerk an, daher probiert die Suche jede Adresse des Netzwerks, in dem Gladys ist: Gladys bittet die Geräte deines Heimnetzwerks (Internet-Router, Fernseher…), auf eine SSDP-Suche zu antworten, und leitet das Netzwerk aus ihren Adressen ab. Die Suche probiert auch das Netzwerk der bereits konfigurierten Ladestationen.\nNur wenn deine Ladestation in einem anderen Netzwerk ist, gib unten den Bereich an. Dein Browser erreicht Gladys unter {{gladys_host}}: Ist das eine Adresse wie 192.168.1.20, lautet der Bereich dieses Netzwerks 192.168.1.0/24 (alle Adressen von 192.168.1.1 bis 192.168.1.254).",
+        "es": "El cargador no se anuncia en la red, así que la búsqueda prueba cada dirección de la red en la que está Gladys: Gladys pide a los dispositivos de su red local (router, televisor…) que respondan a una búsqueda SSDP y deduce la red a partir de sus direcciones. También prueba la red de los cargadores ya configurados.\nSolo si su cargador está en otra red, indique el rango más abajo. Su navegador accede a Gladys en {{gladys_host}}: si es una dirección como 192.168.1.20, el rango de esa red es 192.168.1.0/24 (todas las direcciones de 192.168.1.1 a 192.168.1.254)."
       }
     },
     {
@@ -66,15 +82,21 @@
       "type": "string",
       "label": {
         "en": "Search range (advanced)",
-        "fr": "Plage de recherche (avancé)"
+        "fr": "Plage de recherche (avancé)",
+        "de": "Suchbereich (erweitert)",
+        "es": "Rango de búsqueda (avanzado)"
       },
       "description": {
         "en": "Leave empty to search the network of Gladys. Otherwise a network (192.168.1.0/24), a range (192.168.1.10-192.168.1.60) or addresses, separated by commas. Private addresses only, 1,024 at most.",
-        "fr": "Laissez vide pour chercher sur le réseau de Gladys. Sinon un réseau (192.168.1.0/24), une plage (192.168.1.10-192.168.1.60) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus."
+        "fr": "Laissez vide pour chercher sur le réseau de Gladys. Sinon un réseau (192.168.1.0/24), une plage (192.168.1.10-192.168.1.60) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus.",
+        "de": "Leer lassen, um im Netzwerk von Gladys zu suchen. Sonst ein Netzwerk (192.168.1.0/24), ein Bereich (192.168.1.10-192.168.1.60) oder Adressen, durch Kommas getrennt. Nur private Adressen, höchstens 1.024.",
+        "es": "Déjelo vacío para buscar en la red de Gladys. Si no, una red (192.168.1.0/24), un rango (192.168.1.10-192.168.1.60) o direcciones, separadas por comas. Solo direcciones privadas, 1024 como máximo."
       },
       "placeholder": {
         "en": "e.g. 192.168.1.0/24",
-        "fr": "ex. 192.168.1.0/24"
+        "fr": "ex. 192.168.1.0/24",
+        "de": "z. B. 192.168.1.0/24",
+        "es": "p. ej. 192.168.1.0/24"
       },
       "required": false,
       "default": ""
@@ -84,11 +106,15 @@
       "type": "select",
       "label": {
         "en": "Temperature unit",
-        "fr": "Unité de température"
+        "fr": "Unité de température",
+        "de": "Temperatureinheit",
+        "es": "Unidad de temperatura"
       },
       "description": {
         "en": "Unit of the handle temperature, as scenes compare it. The dashboard always converts to each user's preference.",
-        "fr": "Unité de la température de la poignée, telle que les scènes la comparent. Le tableau de bord convertit toujours selon la préférence de chacun."
+        "fr": "Unité de la température de la poignée, telle que les scènes la comparent. Le tableau de bord convertit toujours selon la préférence de chacun.",
+        "de": "Einheit der Temperatur des Ladegriffs, wie Szenen sie vergleichen. Das Dashboard rechnet immer in die Einstellung jedes Benutzers um.",
+        "es": "Unidad de la temperatura de la empuñadura, tal como la comparan las escenas. El panel siempre convierte según la preferencia de cada usuario."
       },
       "required": false,
       "default": "auto",
@@ -97,21 +123,27 @@
           "value": "auto",
           "label": {
             "en": "Automatic (°F on a 60 Hz grid, else °C)",
-            "fr": "Automatique (°F sur un réseau 60 Hz, sinon °C)"
+            "fr": "Automatique (°F sur un réseau 60 Hz, sinon °C)",
+            "de": "Automatisch (°F bei einem 60-Hz-Netz, sonst °C)",
+            "es": "Automático (°F en una red de 60 Hz, si no °C)"
           }
         },
         {
           "value": "metric",
           "label": {
             "en": "°C",
-            "fr": "°C"
+            "fr": "°C",
+            "de": "°C",
+            "es": "°C"
           }
         },
         {
           "value": "imperial",
           "label": {
             "en": "°F",
-            "fr": "°F"
+            "fr": "°F",
+            "de": "°F",
+            "es": "°F"
           }
         }
       ]
@@ -121,11 +153,15 @@
       "type": "select",
       "label": {
         "en": "Device names language",
-        "fr": "Langue des noms d'appareils"
+        "fr": "Langue des noms d'appareils",
+        "de": "Sprache der Gerätenamen",
+        "es": "Idioma de los nombres de dispositivos"
       },
       "description": {
         "en": "Language of the feature names given to new devices (Gladys keeps a name once the device is created).",
-        "fr": "Langue des noms de fonctionnalités des nouveaux appareils (Gladys garde un nom une fois l'appareil créé)."
+        "fr": "Langue des noms de fonctionnalités des nouveaux appareils (Gladys garde un nom une fois l'appareil créé).",
+        "de": "Sprache der Funktionsnamen neuer Geräte (Gladys behält einen Namen, sobald das Gerät erstellt ist).",
+        "es": "Idioma de los nombres de las funciones de los dispositivos nuevos (Gladys conserva un nombre una vez creado el dispositivo)."
       },
       "required": false,
       "default": "en",
@@ -134,14 +170,36 @@
           "value": "en",
           "label": {
             "en": "English",
-            "fr": "Anglais"
+            "fr": "Anglais",
+            "de": "Englisch",
+            "es": "Inglés"
           }
         },
         {
           "value": "fr",
           "label": {
             "en": "French",
-            "fr": "Français"
+            "fr": "Français",
+            "de": "Französisch",
+            "es": "Francés"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "German",
+            "fr": "Allemand",
+            "de": "Deutsch",
+            "es": "Alemán"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Spanish",
+            "fr": "Espagnol",
+            "de": "Spanisch",
+            "es": "Español"
           }
         }
       ]
@@ -152,11 +210,15 @@
       "key": "scan_wall_connectors",
       "label": {
         "en": "Search for Wall Connectors",
-        "fr": "Rechercher les bornes"
+        "fr": "Rechercher les bornes",
+        "de": "Wall Connectors suchen",
+        "es": "Buscar Wall Connectors"
       },
       "description": {
         "en": "Tries each address of the network of Gladys, or of the search range (up to a minute), and adds the chargers found to the configuration.",
-        "fr": "Essaie chaque adresse du réseau de Gladys, ou de la plage de recherche (jusqu’à une minute), et ajoute les bornes trouvées à la configuration."
+        "fr": "Essaie chaque adresse du réseau de Gladys, ou de la plage de recherche (jusqu’à une minute), et ajoute les bornes trouvées à la configuration.",
+        "de": "Probiert jede Adresse des Netzwerks von Gladys oder des Suchbereichs (bis zu einer Minute) und fügt die gefundenen Ladestationen der Konfiguration hinzu.",
+        "es": "Prueba cada dirección de la red de Gladys o del rango de búsqueda (hasta un minuto) y añade a la configuración los cargadores encontrados."
       },
       "timeout_seconds": 120
     },
@@ -164,11 +226,15 @@
       "key": "test_wall_connector",
       "label": {
         "en": "Test the Wall Connectors",
-        "fr": "Tester les bornes"
+        "fr": "Tester les bornes",
+        "de": "Wall Connectors testen",
+        "es": "Probar los Wall Connectors"
       },
       "description": {
         "en": "Reads each configured address on the home network and shows what answers.",
-        "fr": "Interroge chaque adresse configurée sur le réseau local et affiche ce qui répond."
+        "fr": "Interroge chaque adresse configurée sur le réseau local et affiche ce qui répond.",
+        "de": "Fragt jede konfigurierte Adresse im lokalen Netzwerk ab und zeigt, was antwortet.",
+        "es": "Consulta cada dirección configurada en la red local y muestra lo que responde."
       },
       "timeout_seconds": 60
     }
@@ -178,11 +244,15 @@
       "key": "wall_connector_plugged",
       "label": {
         "en": "Wall Connector: car plugged in",
-        "fr": "Wall Connector : voiture branchée"
+        "fr": "Wall Connector : voiture branchée",
+        "de": "Wall Connector: Auto angeschlossen",
+        "es": "Wall Connector: coche enchufado"
       },
       "description": {
         "en": "A car was plugged into the Wall Connector.",
-        "fr": "Une voiture a été branchée sur la Wall Connector."
+        "fr": "Une voiture a été branchée sur la Wall Connector.",
+        "de": "Ein Auto wurde am Wall Connector angeschlossen.",
+        "es": "Se ha enchufado un coche al Wall Connector."
       },
       "fields": [
         {
@@ -191,7 +261,9 @@
           "source": "devices",
           "label": {
             "en": "Wall Connector",
-            "fr": "Borne Wall Connector"
+            "fr": "Borne Wall Connector",
+            "de": "Wall Connector",
+            "es": "Wall Connector"
           }
         }
       ],
@@ -201,7 +273,9 @@
           "type": "number",
           "label": {
             "en": "Session energy (kWh)",
-            "fr": "Énergie de la session (kWh)"
+            "fr": "Énergie de la session (kWh)",
+            "de": "Energie der Sitzung (kWh)",
+            "es": "Energía de la sesión (kWh)"
           }
         }
       ]
@@ -210,11 +284,15 @@
       "key": "wall_connector_unplugged",
       "label": {
         "en": "Wall Connector: car unplugged",
-        "fr": "Wall Connector : voiture débranchée"
+        "fr": "Wall Connector : voiture débranchée",
+        "de": "Wall Connector: Auto abgesteckt",
+        "es": "Wall Connector: coche desenchufado"
       },
       "description": {
         "en": "The car was unplugged from the Wall Connector.",
-        "fr": "La voiture a été débranchée de la Wall Connector."
+        "fr": "La voiture a été débranchée de la Wall Connector.",
+        "de": "Das Auto wurde vom Wall Connector abgesteckt.",
+        "es": "Se ha desenchufado el coche del Wall Connector."
       },
       "fields": [
         {
@@ -223,7 +301,9 @@
           "source": "devices",
           "label": {
             "en": "Wall Connector",
-            "fr": "Borne Wall Connector"
+            "fr": "Borne Wall Connector",
+            "de": "Wall Connector",
+            "es": "Wall Connector"
           }
         }
       ],
@@ -233,7 +313,9 @@
           "type": "number",
           "label": {
             "en": "Session energy (kWh)",
-            "fr": "Énergie de la session (kWh)"
+            "fr": "Énergie de la session (kWh)",
+            "de": "Energie der Sitzung (kWh)",
+            "es": "Energía de la sesión (kWh)"
           }
         }
       ]
@@ -242,11 +324,15 @@
       "key": "wall_connector_charging_started",
       "label": {
         "en": "Wall Connector started charging",
-        "fr": "La Wall Connector a commencé à charger"
+        "fr": "La Wall Connector a commencé à charger",
+        "de": "Wall Connector hat mit dem Laden begonnen",
+        "es": "El Wall Connector ha empezado a cargar"
       },
       "description": {
         "en": "The Wall Connector starts or resumes delivering power.",
-        "fr": "La Wall Connector commence ou reprend la charge."
+        "fr": "La Wall Connector commence ou reprend la charge.",
+        "de": "Der Wall Connector beginnt oder setzt die Ladung fort.",
+        "es": "El Wall Connector empieza o reanuda la carga."
       },
       "fields": [
         {
@@ -255,7 +341,9 @@
           "source": "devices",
           "label": {
             "en": "Wall Connector",
-            "fr": "Borne Wall Connector"
+            "fr": "Borne Wall Connector",
+            "de": "Wall Connector",
+            "es": "Wall Connector"
           }
         }
       ],
@@ -265,7 +353,9 @@
           "type": "number",
           "label": {
             "en": "Session energy (kWh)",
-            "fr": "Énergie de la session (kWh)"
+            "fr": "Énergie de la session (kWh)",
+            "de": "Energie der Sitzung (kWh)",
+            "es": "Energía de la sesión (kWh)"
           }
         }
       ]
@@ -274,11 +364,15 @@
       "key": "wall_connector_charging_finished",
       "label": {
         "en": "Wall Connector charging finished",
-        "fr": "Charge de la Wall Connector terminée"
+        "fr": "Charge de la Wall Connector terminée",
+        "de": "Laden am Wall Connector beendet",
+        "es": "Carga del Wall Connector terminada"
       },
       "description": {
         "en": "The car plugged into the Wall Connector finished charging.",
-        "fr": "La voiture branchée sur la Wall Connector a fini de charger."
+        "fr": "La voiture branchée sur la Wall Connector a fini de charger.",
+        "de": "Das am Wall Connector angeschlossene Auto hat das Laden beendet.",
+        "es": "El coche enchufado al Wall Connector ha terminado de cargar."
       },
       "fields": [
         {
@@ -287,7 +381,9 @@
           "source": "devices",
           "label": {
             "en": "Wall Connector",
-            "fr": "Borne Wall Connector"
+            "fr": "Borne Wall Connector",
+            "de": "Wall Connector",
+            "es": "Wall Connector"
           }
         }
       ],
@@ -297,7 +393,9 @@
           "type": "number",
           "label": {
             "en": "Session energy (kWh)",
-            "fr": "Énergie de la session (kWh)"
+            "fr": "Énergie de la session (kWh)",
+            "de": "Energie der Sitzung (kWh)",
+            "es": "Energía de la sesión (kWh)"
           }
         }
       ]
@@ -308,11 +406,15 @@
       "key": "wall_connector",
       "label": {
         "en": "Tesla Wall Connector",
-        "fr": "Borne Tesla Wall Connector"
+        "fr": "Borne Tesla Wall Connector",
+        "de": "Tesla Wall Connector",
+        "es": "Tesla Wall Connector"
       },
       "description": {
         "en": "Charging power and current, session and total energy, charger state, plugged-in and charging time.",
-        "fr": "Puissance et courant, énergie de la session et totale, état, durées de branchement et de charge."
+        "fr": "Puissance et courant, énergie de la session et totale, état, durées de branchement et de charge.",
+        "de": "Ladeleistung und -strom, Energie der Sitzung und gesamt, Zustand, Anschluss- und Ladedauer.",
+        "es": "Potencia y corriente de carga, energía de la sesión y total, estado, tiempo enchufado y de carga."
       },
       "icon": "zap",
       "settings": [
@@ -322,7 +424,9 @@
           "source": "devices",
           "label": {
             "en": "Wall Connector",
-            "fr": "Borne Wall Connector"
+            "fr": "Borne Wall Connector",
+            "de": "Wall Connector",
+            "es": "Wall Connector"
           },
           "required": true
         }

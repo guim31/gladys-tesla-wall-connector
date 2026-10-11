@@ -26,9 +26,12 @@ User documentation: [English](docs/en.md) · [Français](docs/fr.md).
   command.
 - **Scene triggers**: car plugged in, car unplugged, charging started, charging
   finished, each with the session energy.
-- **Dashboard widget** "Tesla Wall Connector": live power and current, session
-  and total energy, charger and car state, plugged-in time and charging time
-  (followed by the integration). No button.
+- **Dashboard widget** "Tesla Wall Connector": power and current tiles, then
+  session and total energy, charger and car state, plugged-in time and charging
+  time (followed by the integration). No button.
+- **Four languages**: every text in English, French, German and Spanish, the
+  languages of the Gladys interface (the user documentation stays in English
+  and French: the store only re-hosts those two).
 - **Search for Wall Connectors**: a configuration action that sweeps the
   network of Gladys (or a configured range) and adds the chargers it finds to
   the configuration.
@@ -63,7 +66,9 @@ Wall Connectors**, and add the charger from the **Discovery** tab.
   addresses.
 - The power is computed per phase (three-phase), or grid voltage × vehicle
   current on a 60 Hz split-phase supply.
-- Only **changed** states are published to Gladys, and every state is
+- Only **changed** states are published to Gladys; the power, current,
+  voltage and handle temperature only on a significant change (50 W or 2 %,
+  0.5 A, 2 V, 1 °C), plus once an hour. Every state is
   re-published when a device is created (Gladys drops the states of features
   that do not exist yet). After three missed reads in a row, the charger is
   flagged `unreachable`, else `local`.
