@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-11
+
 ### Added
 
 - The widget shows the charging time of the session, followed by the
@@ -63,5 +65,6 @@ the notes of the version's GitHub Release.
   the same feature, trigger and widget keys; the documentation explains how to
   move a charger from one integration to the other.
 
-[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/guim31/gladys-tesla-wall-connector/releases/tag/v1.0.1

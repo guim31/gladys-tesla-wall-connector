@@ -6,8 +6,8 @@
     "en": "Tesla Wall Connector gen 3 read on your home network: power, energy, charge state.",
     "fr": "Borne Tesla Wall Connector gen 3 lue sur le réseau local : puissance, énergie, charge."
   },
-  "version": "1.0.1",
-  "docker_image": "ghcr.io/guim31/gladys-tesla-wall-connector:1.0.1",
+  "version": "1.1.0",
+  "docker_image": "ghcr.io/guim31/gladys-tesla-wall-connector:1.1.0",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/guim31/gladys-tesla-wall-connector/main/cover.png",
   "categories": ["energy"],
