@@ -130,8 +130,8 @@ Chacune est aussi renvoyée **une fois par heure**, même sans bouger, pour que
 Gladys ne la voie jamais comme périmée. Comptez quelques dizaines de valeurs
 par jour pour chacune, plus quelques-unes pendant une charge, au lieu d'une
 toutes les 15 secondes (5 760 par jour). Les tuiles puissance et courant du
-widget affichent ces valeurs ; ses lignes d'énergie sont lues directement sur la
-borne.
+widget affichent ces valeurs ; sa tuile de session et sa ligne Total sont lues
+directement sur la borne.
 
 La borne donne des tensions et des courants, pas la puissance : celle-ci est
 calculée phase par phase (triphasé en Europe), ou comme tension × courant sur
@@ -181,17 +181,18 @@ principal seul pour le total de la maison.
 Le widget **Borne Tesla Wall Connector** (Gladys 5.1+), réglé avec la borne à
 afficher :
 
-- en haut, deux tuiles côte à côte : **puissance** et **courant** de charge ;
-- en dessous, l'énergie : **Cette session** quand une voiture est branchée,
-  **Dernière session** sinon (la borne garde l'énergie de la session terminée),
-  et le **Total** délivré, arrondi (en MWh au-delà de 1 000 kWh ; la
-  fonctionnalité garde la valeur exacte) ;
+- en haut, trois tuiles côte à côte : **puissance** et **courant** de charge,
+  et l'énergie de **Cette session** quand une voiture est branchée, de la
+  **Session finie** sinon (la borne garde l'énergie de la session terminée), en
+  kWh avec une décimale ;
+- en dessous, le **Total** délivré, en kWh entiers (en MWh à partir de
+  100 000 kWh ; la fonctionnalité garde la valeur exacte) ;
 - l'état de la borne et de la voiture, et, voiture branchée, **Branché depuis**
   (compté par la borne depuis le branchement) et **Durée de charge** (suivie
   par l'intégration : le temps où la borne a réellement délivré du courant
   pendant ce branchement, remis à zéro au débranchement).
 
-L'énergie s'affiche en lignes sous les tuiles, et non en deux tuiles de plus :
+Le total s'affiche en ligne sous les tuiles, et non en quatrième tuile :
 Gladys 5.1.4 range toutes les tuiles d'un widget sur une seule rangée qui passe
 à la ligne après trois, sans réglage du nombre de colonnes, et quatre tuiles
 s'afficheraient en trois plus une.

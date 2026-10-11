@@ -120,8 +120,8 @@ they are sent only when they change significantly since the last value sent:
 Each one is also sent again **once an hour**, even if it did not move, so
 Gladys never sees it as stale. Expect a few dozen values a day for each of
 them, plus some during a charge, instead of one every 15 seconds (5,760 a
-day). The widget's power and current tiles show these values; its energy rows
-are read directly from the charger.
+day). The widget's power and current tiles show these values; its session tile
+and total row are read directly from the charger.
 
 The charger reports voltages and currents, not the power: it is computed phase
 by phase (three-phase in Europe), or as voltage × current on a North American
@@ -169,20 +169,21 @@ them in two widgets, or tick the main meter alone for the house total.
 The **Tesla Wall Connector** widget (Gladys 5.1+), set with the charger to
 show:
 
-- at the top, two tiles side by side: charging **power** and **current**;
-- below, the energy: **This session** while a car is plugged in, **Last
-  session** otherwise (the charger keeps the energy of the finished session),
-  and the **Total** delivered, rounded (in MWh above 1,000 kWh; the feature
-  keeps the exact value);
+- at the top, three tiles side by side: charging **power**, **current**, and
+  the energy of **This session** while a car is plugged in, **Last session**
+  otherwise (the charger keeps the energy of the finished session), in kWh with
+  one decimal;
+- below, the **Total** delivered, in whole kWh (in MWh from 100,000 kWh; the
+  feature keeps the exact value);
 - the state of the charger and of the car and, with a car plugged in,
   **Plugged in for** (counted by the charger from the plug-in) and **Charging
   time** (followed by the integration: the time the charger actually delivered
   power during this plug-in, reset when the car is unplugged).
 
-The energy is shown as rows under the tiles, not as two more tiles: Gladys
-5.1.4 puts all the tiles of a widget in a single row that wraps after three of
-them, and has no setting for the number of columns, so four tiles would show
-as three plus one.
+The total is a row under the tiles, not a fourth tile: Gladys 5.1.4 puts all
+the tiles of a widget in a single row that wraps after three of them, and has
+no setting for the number of columns, so four tiles would show as three plus
+one.
 
 No button: the local API is read-only.
 

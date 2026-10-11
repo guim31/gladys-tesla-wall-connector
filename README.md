@@ -26,8 +26,8 @@ User documentation: [English](docs/en.md) · [Français](docs/fr.md).
   command.
 - **Scene triggers**: car plugged in, car unplugged, charging started, charging
   finished, each with the session energy.
-- **Dashboard widget** "Tesla Wall Connector": power and current tiles, then
-  session and total energy, charger and car state, plugged-in time and charging
+- **Dashboard widget** "Tesla Wall Connector": power, current and session
+  energy tiles, then total energy, charger and car state, plugged-in time and charging
   time (followed by the integration). No button.
 - **Four languages**: every text in English, French, German and Spanish, the
   languages of the Gladys interface (the user documentation stays in English

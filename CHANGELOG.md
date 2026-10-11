@@ -10,6 +10,15 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+### Changed
+
+- Widget: three tiles on one line, power, current and the energy of the
+  session ("This session" / "Last session", in kWh with one decimal, short
+  enough for a third of a phone's width). The total stays a row, in whole kWh
+  with the thousands separator of the language ("8,597 kWh"), in MWh from
+  100,000 kWh only. The French tile reads "Session finie" once the car is
+  unplugged: "Dernière session" did not fit.
+
 ## [1.2.0] - 2026-10-11
 
 ### Added
