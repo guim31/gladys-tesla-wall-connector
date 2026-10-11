@@ -12,6 +12,12 @@
   "cover_image": "https://raw.githubusercontent.com/guim31/gladys-tesla-wall-connector/main/cover.png",
   "categories": ["energy"],
   "transports": ["local"],
+  "network_discovery": [
+    {
+      "type": "ssdp",
+      "st": "upnp:rootdevice"
+    }
+  ],
   "config_schema": [
     {
       "key": "intro",
@@ -47,24 +53,24 @@
       "key": "search_help",
       "type": "section",
       "label": {
-        "en": "Searching the network",
-        "fr": "Recherche sur le réseau"
+        "en": "Searching the network (advanced)",
+        "fr": "Recherche sur le réseau (avancé)"
       },
       "description": {
-        "en": "The charger does not announce itself on the network, so the search tries each address of a range. The integration runs in an isolated container and cannot see which network Gladys is on: give that range below.\nYour browser reaches Gladys at {{gladys_host}}. If that is an address like 192.168.1.20, the range is 192.168.1.0/24 (every address from 192.168.1.1 to 192.168.1.254). Left empty, the search tries the network of the chargers already configured, else 192.168.1.0/24 and 192.168.0.0/24, the most common home networks.",
-        "fr": "La borne ne s’annonce pas sur le réseau : la recherche essaie donc chaque adresse d’une plage. L’intégration tourne dans un conteneur isolé et ne peut pas voir sur quel réseau est Gladys : indiquez cette plage ci-dessous.\nVotre navigateur joint Gladys à l’adresse {{gladys_host}}. Si c’est une adresse comme 192.168.1.20, la plage est 192.168.1.0/24 (toutes les adresses de 192.168.1.1 à 192.168.1.254). Laissée vide, la recherche essaie le réseau des bornes déjà configurées, sinon 192.168.1.0/24 et 192.168.0.0/24, les réseaux domestiques les plus courants."
+        "en": "The charger does not announce itself on the network, so the search tries each address of the network Gladys is on: Gladys asks the devices of your home network (internet box, TV…) to answer an SSDP search and deduces the network from their addresses. It also tries the network of the chargers already configured.\nOnly if your charger is on another network, give the range below. Your browser reaches Gladys at {{gladys_host}}: if that is an address like 192.168.1.20, the range of that network is 192.168.1.0/24 (every address from 192.168.1.1 to 192.168.1.254).",
+        "fr": "La borne ne s’annonce pas sur le réseau : la recherche essaie donc chaque adresse du réseau de Gladys. Gladys demande aux appareils de votre réseau local (box internet, télévision…) de répondre à une recherche SSDP et en déduit le réseau d’après leurs adresses. Elle essaie aussi le réseau des bornes déjà configurées.\nSeulement si votre borne est sur un autre réseau, indiquez la plage ci-dessous. Votre navigateur joint Gladys à l’adresse {{gladys_host}} : si c’est une adresse comme 192.168.1.20, la plage de ce réseau est 192.168.1.0/24 (toutes les adresses de 192.168.1.1 à 192.168.1.254)."
       }
     },
     {
       "key": "scan_range",
       "type": "string",
       "label": {
-        "en": "Search range",
-        "fr": "Plage de recherche"
+        "en": "Search range (advanced)",
+        "fr": "Plage de recherche (avancé)"
       },
       "description": {
-        "en": "A network (192.168.1.0/24), a range (192.168.1.10-192.168.1.60) or addresses, separated by commas. Private addresses only, 1,024 at most.",
-        "fr": "Un réseau (192.168.1.0/24), une plage (192.168.1.10-192.168.1.60) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus."
+        "en": "Leave empty to search the network of Gladys. Otherwise a network (192.168.1.0/24), a range (192.168.1.10-192.168.1.60) or addresses, separated by commas. Private addresses only, 1,024 at most.",
+        "fr": "Laissez vide pour chercher sur le réseau de Gladys. Sinon un réseau (192.168.1.0/24), une plage (192.168.1.10-192.168.1.60) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus."
       },
       "placeholder": {
         "en": "e.g. 192.168.1.0/24",
@@ -149,8 +155,8 @@
         "fr": "Rechercher les bornes"
       },
       "description": {
-        "en": "Tries each address of the search range (up to a minute) and adds the chargers found to the configuration.",
-        "fr": "Essaie chaque adresse de la plage de recherche (jusqu’à une minute) et ajoute les bornes trouvées à la configuration."
+        "en": "Tries each address of the network of Gladys, or of the search range (up to a minute), and adds the chargers found to the configuration.",
+        "fr": "Essaie chaque adresse du réseau de Gladys, ou de la plage de recherche (jusqu’à une minute), et ajoute les bornes trouvées à la configuration."
       },
       "timeout_seconds": 120
     },
@@ -305,8 +311,8 @@
         "fr": "Borne Tesla Wall Connector"
       },
       "description": {
-        "en": "Charging power, session and total energy, state of the charger and of the plugged car.",
-        "fr": "Puissance de charge, énergie de la session et totale, état de la borne et du véhicule."
+        "en": "Charging power and current, session and total energy, charger state, plugged-in and charging time.",
+        "fr": "Puissance et courant, énergie de la session et totale, état, durées de branchement et de charge."
       },
       "icon": "zap",
       "settings": [

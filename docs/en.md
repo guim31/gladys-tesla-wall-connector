@@ -5,11 +5,12 @@ state, power, session energy and total energy delivered, voltage, current,
 handle temperature. The charger is read **directly on your home network**: no
 Tesla account, no cloud, no subscription.
 
-> **Built without the hardware: feedback welcome.** This integration was built
-> without a charger, on sample answers taken from the tests of the
-> `tesla-wall-connector` library (the one Home Assistant uses). The power
-> computation, the charger states and the network search still need checking on
-> a real charger. If something looks wrong, say so on the Gladys forum.
+> **Tested on a gen 3 charger on a single-phase supply; three-phase not
+> tested.** A user tried it on their charger, with a Tesla and a plug-in hybrid
+> of another make: search, power (checked against the Tesla app and a meter),
+> consumption and cost. Three-phase and the North American split-phase supply
+> have not been checked on a real charger yet. If something looks wrong, say so
+> on the Gladys forum.
 
 This integration is not affiliated with Tesla, Inc.
 
@@ -41,12 +42,12 @@ the new one (or search again) and the same device carries on, with its history.
 
 ### Settings
 
-| Setting                      | Role                                                                                                                                                                      |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Wall Connector addresses** | IP address (or host name) of each charger, separated by commas. The search fills it in too.                                                                               |
-| **Search range**             | Where to look for chargers: a network (`192.168.1.0/24`), a range (`192.168.1.10-192.168.1.60`) or addresses, separated by commas. Private addresses only, 1,024 at most. |
-| **Temperature unit**         | Unit of the handle temperature as scenes compare it: automatic (°F on a North American charger, else °C), °C or °F. The dashboard always converts.                        |
-| **Device names language**    | English or French feature names for new devices. Gladys keeps a feature's name once the device is created.                                                                |
+| Setting                      | Role                                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Wall Connector addresses** | IP address (or host name) of each charger, separated by commas. The search fills it in too.                                                                                                                         |
+| **Search range (advanced)**  | Usually left empty: the search takes the network of Gladys. Otherwise a network (`192.168.1.0/24`), a range (`192.168.1.10-192.168.1.60`) or addresses, separated by commas. Private addresses only, 1,024 at most. |
+| **Temperature unit**         | Unit of the handle temperature as scenes compare it: automatic (°F on a North American charger, else °C), °C or °F. The dashboard always converts.                                                                  |
+| **Device names language**    | English or French feature names for new devices. Gladys keeps a feature's name once the device is created.                                                                                                          |
 
 ## Automatic search
 
@@ -62,31 +63,41 @@ show up in the **Discovery** tab. A known charger found at a new address
 replaces its old address. **Reload the page before saving the configuration
 form again**, or it would put back the old addresses.
 
-**Which range?** The integration runs in an isolated container: it cannot see
-which network Gladys is on, hence the **Search range** setting. The "Searching
-the network" block of the configuration shows the address your browser reaches
-Gladys by: if it is `192.168.1.20`, the range is `192.168.1.0/24` (addresses
-`192.168.1.1` to `192.168.1.254`). If you go through Gladys Plus or a name such
-as `gladys.local`, look up the IP address of Gladys in your router.
+**Which range?** The integration runs in an isolated container, on a Docker
+network of its own: it cannot see directly which network Gladys is on. So it
+asks Gladys: Gladys runs an **SSDP** search on your home network (the only
+network capture the integration asks for, shown at install time) and the
+devices answering (internet box, TV, speaker…) give the network, such as
+`10.0.0.0/24`. Without a **Search range**, the search tries, in this order:
 
-Left empty, the search tries the network of the chargers already configured,
-else `192.168.1.0/24` and `192.168.0.0/24`, the most common home networks.
+1. the network of the chargers already configured;
+2. the network of Gladys, found that way (the search message shows it:
+   "Network of Gladys: 10.0.0.0/24");
+3. if no device answered Gladys: `192.168.1.0/24` and `192.168.0.0/24`, the
+   most common home networks, and the message says so.
+
+The **Search range** setting is only needed when the charger is on another
+network than Gladys, or the search picks the wrong one. The "Searching the
+network" block of the configuration shows the address your browser reaches
+Gladys by: if it is `192.168.1.20`, the range of that network is
+`192.168.1.0/24` (addresses `192.168.1.1` to `192.168.1.254`).
 
 A search takes a few seconds to a minute. It never leaves the home network:
-only private addresses are accepted, 1,024 at most.
+only private addresses are accepted, 1,024 at most. When no charger answers,
+the result shows **in red**, with what to check.
 
 ## What you get
 
-| Feature                | Details                                                                   |
-| ---------------------- | ------------------------------------------------------------------------- |
-| Connector              | Available, occupied (a car is plugged in), unavailable, faulted           |
-| Charging state         | Charging, vehicle connected, paused (car), idle                           |
-| Status                 | The charger's own state in words (ready, negotiating, charging finished…) |
-| Charging power         | W                                                                         |
-| Session energy         | kWh delivered since the car was plugged in                                |
-| Total energy delivered | Cumulative index in kWh, for the energy monitoring of Gladys              |
-| Grid voltage, current  | V, A                                                                      |
-| Handle temperature     | °C or °F (**Temperature unit** setting)                                   |
+| Feature                | Details                                                          |
+| ---------------------- | ---------------------------------------------------------------- |
+| Connector              | Available, occupied (a car is plugged in), unavailable, faulted  |
+| Charging state         | Charging, vehicle connected, paused (car or charger), idle       |
+| Status                 | The charger's own state in words (see [States](#charger-states)) |
+| Charging power         | W                                                                |
+| Session energy         | kWh delivered since the car was plugged in                       |
+| Total energy delivered | Cumulative index in kWh, for the energy monitoring of Gladys     |
+| Grid voltage, current  | V, A                                                             |
+| Handle temperature     | °C or °F (**Temperature unit** setting)                          |
 
 Everything is read-only: the charger's local API does not start, stop or limit
 a charge (do it from the car or the Tesla app).
@@ -98,6 +109,32 @@ charger shows as **unreachable** (badge on the device).
 The charger reports voltages and currents, not the power: it is computed phase
 by phase (three-phase in Europe), or as voltage × current on a North American
 240 V split-phase supply (recognized by its 60 Hz grid).
+
+## Charger states
+
+The charger reports a state number (`evse_state`). Their meaning comes from
+Home Assistant, corrected by what a user read on their single-phase charger
+(October 2026):
+
+| State | Status shown                          | What was seen                                                           |
+| ----- | ------------------------------------- | ----------------------------------------------------------------------- |
+| 1     | Vehicle not connected                 | No car                                                                  |
+| 4     | Ready to charge                       | Tesla plugged in, not charging                                          |
+| 7     | Plugged in, outside charging schedule | Tesla plugged in **outside its charging schedule**: normal, not a fault |
+| 8     | Charging finished                     | (not seen)                                                              |
+| 9     | Waiting for the car                   | Tesla plugged in, schedule open; also after a charge stops              |
+| 10    | Charging (likely non-Tesla)           | The non-Tesla car charging                                              |
+| 11    | Charging                              | The Tesla charging                                                      |
+| 12    | Plugged in (likely non-Tesla)         | The non-Tesla car being plugged in                                      |
+| 13    | Session ending (likely non-Tesla)     | End of charge and unplugging of the non-Tesla car                       |
+| 21    | Session ending                        | The Tesla being unplugged                                               |
+
+State 7 shows as an **Error** (connector "faulted", red in the widget) only
+when no car is plugged in or the charger raises an alert (`current_alerts`).
+
+**Tesla or another car?** States 10, 12 and 13 were only seen with the car of
+another make, and 4, 9, 11 and 21 only with the Tesla. That comes from a single
+test: the status therefore says "likely non-Tesla", no more.
 
 ## Energy monitoring
 
@@ -113,18 +150,31 @@ them in two widgets, or tick the main meter alone for the house total.
 ## Dashboard
 
 The **Tesla Wall Connector** widget (Gladys 5.1+), set with the charger to
-show: charging power, session and total energy, current, charger state, car
-plugged in and session duration. No button: the local API is read-only.
+show:
+
+- at the top, what moves live: charging **power** and **current**;
+- below, the energy: **This session** while a car is plugged in, **Last
+  session** otherwise (the charger keeps the energy of the finished session),
+  and the **Total** delivered, rounded to fit its tile (in MWh above 1,000 kWh;
+  the feature keeps the exact value);
+- the state of the charger and of the car and, with a car plugged in,
+  **Plugged in for** (counted by the charger from the plug-in) and **Charging
+  time** (followed by the integration: the time the charger actually delivered
+  power during this plug-in, reset when the car is unplugged).
+
+No button: the local API is read-only.
 
 ## Scenes
 
 Triggers, each one can be limited to one charger, with the session energy in
 kWh:
 
-- **Wall Connector: car plugged in**
+- **Wall Connector: car plugged in** (outside the charging schedule too)
 - **Wall Connector: car unplugged**
 - **Wall Connector started charging**
-- **Wall Connector charging finished**
+- **Wall Connector charging finished**: the charge stops while the car stays
+  plugged in (charge complete, schedule closed…) or ends with the unplugging
+  (states 13 and 21)
 
 They only fire on an observed change: a restart of the integration neither
 replays nor loses an event. Every feature above also works in scenes the usual
@@ -162,8 +212,9 @@ used the Tesla integration for the charger, you can uninstall it.
 - **"No Wall Connector answers"**: check the IP address in your router and that
   the charger is on the Wi-Fi (Tesla One app), then press **Test the Wall
   Connectors**.
-- **The search finds nothing**: check the **Search range** (the charger's
-  network, see above). A charger on another network (a separate "IoT" Wi-Fi, a
+- **The search finds nothing**: look at the network it searched (in its
+  message); if it is not the charger's, give it in **Search range** (see
+  above). A charger on another network (a separate "IoT" Wi-Fi, a
   VLAN) is searched with that network's range, if Gladys can reach it. A strict
   firewall on the Gladys machine (ufw) can also block the integrations' traffic
   to the home network.

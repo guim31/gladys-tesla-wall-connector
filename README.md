@@ -4,10 +4,12 @@ A [Gladys Assistant](https://gladysassistant.com) external integration for the
 **Tesla Wall Connector gen 3**, read directly on the home network: no Tesla
 account, no cloud, no subscription.
 
-> **Built without the hardware: feedback welcome.** No charger was used. The
-> tests run on the sample answers of the `tesla-wall-connector` library's tests
-> (anonymized serial numbers and addresses). Reports from owners are very
-> welcome on the Gladys forum.
+> **Tested on a gen 3 charger on a single-phase supply; three-phase not
+> tested.** A user ran it on a real charger with a Tesla and a non-Tesla
+> plug-in hybrid (October 2026). The tests run on the sample answers of the
+> `tesla-wall-connector` library's tests and on the state sequences of that
+> real test (`test/fixtures/single-phase/`, made-up values). Reports from owners
+> are very welcome on the Gladys forum.
 
 **Not affiliated with Tesla, Inc.** Tesla and Wall Connector are trademarks of
 Tesla, Inc.
@@ -24,10 +26,12 @@ User documentation: [English](docs/en.md) · [Français](docs/fr.md).
   command.
 - **Scene triggers**: car plugged in, car unplugged, charging started, charging
   finished, each with the session energy.
-- **Dashboard widget** "Tesla Wall Connector": live power and energies, charger
-  and car state, session duration. No button.
-- **Search for Wall Connectors**: a configuration action that sweeps a range of
-  the home network and adds the chargers it finds to the configuration.
+- **Dashboard widget** "Tesla Wall Connector": live power and current, session
+  and total energy, charger and car state, plugged-in time and charging time
+  (followed by the integration). No button.
+- **Search for Wall Connectors**: a configuration action that sweeps the
+  network of Gladys (or a configured range) and adds the chargers it finds to
+  the configuration.
 
 It is the Wall Connector part of the
 [Tesla integration](https://github.com/guim31/gladys-tesla) 1.1.0, moved to its
@@ -63,19 +67,26 @@ Wall Connectors**, and add the charger from the **Discovery** tab.
   re-published when a device is created (Gladys drops the states of features
   that do not exist yet). After three missed reads in a row, the charger is
   flagged `unreachable`, else `local`.
-- The last address, energy index and session state of each charger are
-  persisted under `/data`: a restart neither resets the index nor replays a
-  trigger.
+- The charger states (`evse_state`) follow Home Assistant's table, corrected by
+  a real single-phase test: 7 with a car plugged in and no alert is "outside
+  the charging schedule", not a fault; 12, 10 and 13 (seen only with a
+  non-Tesla car: "likely non-Tesla") and 21 (a Tesla unplugging) are known.
+- The last address, energy index, session state and charging time of each
+  charger are persisted under `/data`: a restart neither resets the index nor
+  replays a trigger.
 - **Search**: the charger announces itself neither in mDNS nor in SSDP, and the
-  integration's container sits on a Docker bridge that sees no LAN broadcast and
-  cannot tell which network Gladys is on. Unicast to the LAN does go through,
-  so the search tries a TCP connection to port 80 of each address of a range
-  (64 at a time, 1 s), then reads `/api/1/version` and `/api/1/vitals` on the
-  open ones and keeps those shaped like a Wall Connector. The range is the
-  configured one (private addresses only, 1,024 at most), else the /24 of the
-  chargers already configured, else `192.168.1.0/24` and `192.168.0.0/24`. The
-  configuration screen shows the address the browser reaches Gladys by
-  (`{{gladys_host}}`) to help pick the range.
+  integration's container sits on a Docker bridge (`gladys-integrations`, never
+  the host network) that sees no LAN broadcast and is not told the LAN address
+  of Gladys. Unicast to the LAN does go through, so the search tries a TCP
+  connection to port 80 of each address of a range (64 at a time, 1 s), then
+  reads `/api/1/version` and `/api/1/vitals` on the open ones and keeps those
+  shaped like a Wall Connector. The range is the configured one (private
+  addresses only, 1,024 at most), else the /24 of the chargers already
+  configured and the /24 networks of the devices answering an SSDP search
+  (`upnp:rootdevice`) the core runs for the integration from the host network
+  (manifest `network_discovery`), else `192.168.1.0/24` and `192.168.0.0/24`.
+  Nothing found is an error (red in Gladys, which has no warning level for an
+  action result).
 
 ## Development
 

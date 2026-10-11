@@ -7,17 +7,19 @@
 //     charger answering slowly would then make the core wait on it);
 //   - a charger is flagged "unreachable" after 3 missed reads in a row;
 //   - the chargers are read in parallel, so a slow one delays nobody.
-// This is the Wall Connector part of the Tesla integration 1.1.0, unchanged in
-// behavior, plus the search for chargers on the network (src/wallConnector/scan.js).
+// This started as the Wall Connector part of the Tesla integration 1.1.0; it
+// adds the search for chargers on the network (src/wallConnector/scan.js), the
+// charging time of the session, and the states read on a real charger.
 // -----------------------------------------------------------------------------
 
 import { DEVICE_TRANSPORTS, createLogger } from '@gladysassistant/integration-sdk';
 import { wallConnectorHosts } from './config.js';
 import {
-  EVSE_STATES,
   WALL_CONNECTOR_FEATURES,
   buildWallConnectorDevice,
+  isCharging,
   sessionState,
+  stateText,
   wallConnectorIds,
   wallConnectorStates,
   wallConnectorTemperatureUnit,
@@ -25,6 +27,8 @@ import {
 import { createWallConnectorClient } from './wallConnector/client.js';
 import {
   DEFAULT_SCAN_RANGES,
+  MAX_SCAN_RANGES,
+  lanRangesFromSsdp,
   parseScanRange,
   scanForWallConnectors,
   subnet24,
@@ -55,6 +59,22 @@ export const STATUS_MESSAGES = {
 };
 
 const lastDigits = (serial) => `…${String(serial).slice(-4)}`;
+
+// SSDP search run by the core on the search's behalf (manifest
+// `network_discovery`): who answers tells which network Gladys is on.
+const SSDP_TIMEOUT_SECONDS = 3;
+
+/**
+ * An action that failed: thrown, so Gladys shows the message in red. The core
+ * (5.1.4) relays the thrown `message` untouched up to the browser, which picks
+ * the user's language in a `{ en, fr }` object; it has no "warning" level.
+ */
+export class ActionFailure extends Error {
+  constructor(message) {
+    super(message.en);
+    this.message = message;
+  }
+}
 
 export function createRuntime({
   gladys,
@@ -251,6 +271,26 @@ export function createRuntime({
       next.energyKwh = kwh;
     }
     wc.energyKwh = next.energyKwh ?? null;
+    // Charging time of the session, followed here: `session_s` counts from
+    // the moment the car was plugged in, not from the start of the charge.
+    if (vitals) {
+      let seconds = memory.chargeSeconds ?? 0;
+      let since = memory.chargeSince ?? null;
+      if (vitals.vehicle_connected === false) {
+        seconds = 0;
+        since = null;
+      } else if (isCharging(vitals)) {
+        since ??= now();
+      } else if (since !== null) {
+        seconds += Math.max(0, Math.round((now() - since) / 1000));
+        since = null;
+      }
+      if (seconds !== (memory.chargeSeconds ?? 0) || since !== (memory.chargeSince ?? null)) {
+        next.chargeSeconds = seconds;
+        next.chargeSince = since;
+        memoryChanged = true;
+      }
+    }
     // Scene triggers: the charger's own session transitions.
     let transitions = [];
     const session = vitals ? sessionState(vitals) : null;
@@ -283,7 +323,8 @@ export function createRuntime({
     if (
       previous.reachable !== wc.reachable ||
       previous.vitals?.evse_state !== wc.vitals?.evse_state ||
-      previous.vitals?.vehicle_connected !== wc.vitals?.vehicle_connected
+      previous.vitals?.vehicle_connected !== wc.vitals?.vehicle_connected ||
+      previous.vitals?.contactor_closed !== wc.vitals?.contactor_closed
     ) {
       nudgeWidget();
     }
@@ -399,8 +440,26 @@ export function createRuntime({
 
   // --- Search (manifest action) ----------------------------------------------
 
-  /** Where to look: the configured range, else the chargers' /24, else the defaults. */
-  function scanTargets() {
+  /**
+   * The /24 networks of the devices answering an SSDP search made by Gladys
+   * (the core runs on the host network, the container does not): the network
+   * Gladys is on. Empty when nothing answers or the core refuses.
+   */
+  async function gladysNetworks() {
+    try {
+      const answers = await gladys.scanNetwork('ssdp', { timeoutSeconds: SSDP_TIMEOUT_SECONDS });
+      return lanRangesFromSsdp(answers);
+    } catch (err) {
+      logger.warn(`The SSDP search of Gladys failed: ${err.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Where to look: the configured range, else the networks of the chargers
+   * already configured and of Gladys, else the two most common home networks.
+   */
+  async function scanTargets() {
     if (config.scan_range) {
       return {
         source: 'config',
@@ -408,31 +467,27 @@ export function createRuntime({
         ...parseScanRange(config.scan_range),
       };
     }
-    const fromChargers = [
-      ...new Set(wallConnectorHosts(config).map(subnet24).filter(Boolean)),
-    ].slice(0, 4);
-    const ranges = fromChargers.length ? fromChargers : DEFAULT_SCAN_RANGES;
+    const chargers = [...new Set(wallConnectorHosts(config).map(subnet24).filter(Boolean))];
+    const lan = (await gladysNetworks()).filter((range) => !chargers.includes(range));
+    const ranges = [...chargers, ...lan].slice(0, MAX_SCAN_RANGES);
+    if (ranges.length === 0) {
+      return {
+        source: 'default',
+        ranges: DEFAULT_SCAN_RANGES,
+        lan: [],
+        ...parseScanRange(DEFAULT_SCAN_RANGES.join(',')),
+      };
+    }
     return {
-      source: fromChargers.length ? 'chargers' : 'default',
+      source: 'network',
       ranges,
+      lan: lan.filter((range) => ranges.includes(range)),
       ...parseScanRange(ranges.join(',')),
     };
   }
 
   async function searchWallConnectors() {
     if (!config) return STATUS_MESSAGES.noCharger;
-    const targets = scanTargets();
-    if (targets.invalid.length || targets.notPrivate.length || targets.tooLarge) {
-      const bad = [...targets.invalid, ...targets.notPrivate].join(', ');
-      return {
-        en:
-          `The search range of the configuration is not usable${bad ? ` (${bad})` : ''}.\n` +
-          'Give private addresses of your home network, 1,024 at most: a network such as 192.168.1.0/24, or a range such as 192.168.1.10-192.168.1.60.',
-        fr:
-          `La plage de recherche de la configuration est inutilisable${bad ? ` (${bad})` : ''}.\n` +
-          'Indiquez des adresses privées de votre réseau local, 1 024 au plus : un réseau comme 192.168.1.0/24, ou une plage comme 192.168.1.10-192.168.1.60.',
-      };
-    }
     if (searching) {
       return {
         en: 'A search is already running, wait for its result.',
@@ -440,23 +495,44 @@ export function createRuntime({
       };
     }
     searching = true;
-    const startedAt = now();
-    let result;
     try {
-      logger.info(`Searching ${targets.addresses.length} addresses for Wall Connectors`);
-      result = await scan({ addresses: targets.addresses });
+      return await search();
     } finally {
       searching = false;
     }
+  }
+
+  async function search() {
+    const startedAt = now();
+    const targets = await scanTargets();
+    if (targets.invalid.length || targets.notPrivate.length || targets.tooLarge) {
+      const bad = [...targets.invalid, ...targets.notPrivate].join(', ');
+      throw new ActionFailure({
+        en:
+          `The search range of the configuration is not usable${bad ? ` (${bad})` : ''}.\n` +
+          'Give private addresses of your home network, 1,024 at most: a network such as 192.168.1.0/24, or a range such as 192.168.1.10-192.168.1.60.',
+        fr:
+          `La plage de recherche de la configuration est inutilisable${bad ? ` (${bad})` : ''}.\n` +
+          'Indiquez des adresses privées de votre réseau local, 1 024 au plus : un réseau comme 192.168.1.0/24, ou une plage comme 192.168.1.10-192.168.1.60.',
+      });
+    }
+    logger.info(`Searching ${targets.addresses.length} addresses for Wall Connectors`);
+    const result = await scan({ addresses: targets.addresses });
     const seconds = Math.max(1, Math.round((now() - startedAt) / 1000));
     const where = targets.ranges.join(', ');
     const lines = { en: [], fr: [] };
     lines.en.push(`${result.scanned} addresses searched (${where}) in ${seconds} s.`);
     lines.fr.push(`${result.scanned} adresses explorées (${where}) en ${seconds} s.`);
+    if (targets.lan?.length) {
+      lines.en.push(`Network of Gladys: ${targets.lan.join(', ')}.`);
+      lines.fr.push(`Réseau de Gladys : ${targets.lan.join(', ')}.`);
+    }
     if (targets.source === 'default') {
-      lines.en.push('No range in the configuration: the two most common home networks were tried.');
+      lines.en.push(
+        'The network of Gladys could not be found (no device answered its SSDP search): the two most common home networks were tried.',
+      );
       lines.fr.push(
-        'Aucune plage dans la configuration : les deux réseaux domestiques les plus courants ont été essayés.',
+        'Le réseau de Gladys n’a pas pu être trouvé (aucun appareil n’a répondu à sa recherche SSDP) : les deux réseaux domestiques les plus courants ont été essayés.',
       );
     }
     if (!result.complete) {
@@ -499,7 +575,7 @@ export function createRuntime({
         'Aucune Wall Connector n’a répondu.',
         'Vérifiez que la borne est connectée à votre Wi-Fi (application Tesla One), puis indiquez la plage de votre réseau dans la configuration (ex. 192.168.1.0/24), ou saisissez l’adresse de la borne.',
       );
-      return { en: lines.en.join('\n'), fr: lines.fr.join('\n') };
+      throw new ActionFailure({ en: lines.en.join('\n'), fr: lines.fr.join('\n') });
     }
     lines.en.push(`Wall Connector(s) found: ${found.length}.`);
     lines.fr.push(`Borne(s) trouvée(s) : ${found.length}.`);
@@ -597,7 +673,7 @@ export function createRuntime({
         try {
           const version = await probe.version();
           const vitals = await probe.vitals();
-          const state = EVSE_STATES[vitals?.evse_state];
+          const state = stateText(vitals ?? {});
           const serial = String(version?.serial_number ?? '?');
           lines.en.push(
             `${host}: Wall Connector ${lastDigits(serial)}, firmware ${version?.firmware_version ?? '?'}, ${state?.en ?? `state ${vitals?.evse_state}`}.`,
@@ -617,11 +693,16 @@ export function createRuntime({
     wallConnectorView(deviceExternalId) {
       const wc = findWallConnector(deviceExternalId);
       if (!wc) return null;
+      const memory = persistedWallConnectors()[wc.serial] ?? {};
+      const since = memory.chargeSince ?? null;
       return {
         device: wallConnectorDevice(wc),
         vitals: wc.vitals ?? {},
         reachable: wc.reachable !== false,
         energyKwh: wc.energyKwh,
+        chargingSeconds:
+          (memory.chargeSeconds ?? 0) +
+          (since === null ? 0 : Math.max(0, Math.round((now() - since) / 1000))),
       };
     },
   };

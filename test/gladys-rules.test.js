@@ -35,6 +35,22 @@ const SCENARIOS = {
     host: WC_HOSTS.NA,
   },
 };
+// Every step of the single-phase sequences of a real test (a Tesla, a
+// non-Tesla car), on the EU charger.
+const sequences = JSON.parse(
+  await readFile(new URL('./fixtures/single-phase/sequences.json', import.meta.url), 'utf8'),
+);
+for (const [car, steps] of [
+  ['Tesla', sequences.tesla],
+  ['non-Tesla', sequences.other_make],
+]) {
+  steps.forEach((step, i) => {
+    SCENARIOS[`single phase, ${car} ${i + 1}: state ${step.vitals.evse_state}`] = {
+      vitals: { ...sequences.base, ...step.vitals },
+      host: WC_HOSTS.EU,
+    };
+  });
+}
 
 const CONFIGS = [
   { units: 'auto', language: 'en' },

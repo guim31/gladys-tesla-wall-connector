@@ -6,12 +6,12 @@ délivrée, tension, courant, température de la poignée. La borne est lue
 **directement sur votre réseau local** : ni compte Tesla, ni cloud, ni
 abonnement.
 
-> **Développée sans le matériel : retours bienvenus.** Cette intégration a été
-> construite sans borne, sur des exemples de réponses tirés des tests de la
-> bibliothèque `tesla-wall-connector` (celle qu'utilise Home Assistant). Le
-> calcul de la puissance, les états de la borne et la recherche sur le réseau
-> attendent une vérification sur une vraie borne. Si quelque chose vous semble
-> faux, dites-le sur le forum Gladys.
+> **Testée sur une borne gen 3 en monophasé ; triphasé non testé.** Un
+> utilisateur l'a essayée sur sa borne, avec une Tesla et une hybride
+> rechargeable d'une autre marque : recherche, puissance (recoupée avec
+> l'application Tesla et un compteur), consommation et coût. Le triphasé et le
+> biphasé nord-américain n'ont pas encore été vérifiés sur une vraie borne. Si
+> quelque chose vous semble faux, dites-le sur le forum Gladys.
 
 Cette intégration n'est pas affiliée à Tesla, Inc.
 
@@ -45,12 +45,12 @@ appareil continue, avec son historique.
 
 ### Réglages
 
-| Réglage                         | Rôle                                                                                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Adresses des bornes**         | Adresse IP (ou nom d'hôte) de chaque borne, séparées par des virgules. La recherche la remplit aussi.                                                                                 |
-| **Plage de recherche**          | Où chercher les bornes : un réseau (`192.168.1.0/24`), une plage (`192.168.1.10-192.168.1.60`) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus. |
-| **Unité de température**        | Unité de la température de la poignée telle que les scènes la comparent : automatique (°F sur une borne nord-américaine, °C sinon), °C ou °F. Le tableau de bord convertit toujours.  |
-| **Langue des noms d'appareils** | Noms anglais ou français des fonctionnalités des nouveaux appareils. Gladys garde le nom d'une fonctionnalité une fois l'appareil créé.                                               |
+| Réglage                         | Rôle                                                                                                                                                                                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Adresses des bornes**         | Adresse IP (ou nom d'hôte) de chaque borne, séparées par des virgules. La recherche la remplit aussi.                                                                                                                                  |
+| **Plage de recherche (avancé)** | À laisser vide en général : la recherche prend le réseau de Gladys. Sinon un réseau (`192.168.1.0/24`), une plage (`192.168.1.10-192.168.1.60`) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus. |
+| **Unité de température**        | Unité de la température de la poignée telle que les scènes la comparent : automatique (°F sur une borne nord-américaine, °C sinon), °C ou °F. Le tableau de bord convertit toujours.                                                   |
+| **Langue des noms d'appareils** | Noms anglais ou français des fonctionnalités des nouveaux appareils. Gladys garde le nom d'une fonctionnalité une fois l'appareil créé.                                                                                                |
 
 ## Recherche automatique
 
@@ -68,33 +68,44 @@ elles apparaissent dans l'onglet **Découverte**. Une borne déjà connue trouv�
 d'enregistrer à nouveau le formulaire de configuration**, sinon il remettrait
 les anciennes adresses.
 
-**Quelle plage ?** L'intégration tourne dans un conteneur isolé : elle ne voit
-pas sur quel réseau se trouve Gladys, d'où le champ **Plage de recherche**. Le
-bloc « Recherche sur le réseau » de la configuration affiche l'adresse par
-laquelle votre navigateur joint Gladys : si c'est `192.168.1.20`, la plage est
-`192.168.1.0/24` (les adresses de `192.168.1.1` à `192.168.1.254`). Si vous
-passez par Gladys Plus ou un nom comme `gladys.local`, cherchez l'adresse IP
-de Gladys dans votre box.
+**Quelle plage ?** L'intégration tourne dans un conteneur isolé, sur un réseau
+Docker à part : elle ne voit pas directement sur quel réseau se trouve Gladys.
+Elle le demande donc à Gladys : Gladys lance une recherche **SSDP** sur votre
+réseau local (c'est la seule capture réseau que l'intégration demande, affichée
+à l'installation) et les appareils qui répondent (box internet, télévision,
+enceinte…) donnent le réseau, par exemple `10.0.0.0/24`. Sans **Plage de
+recherche**, la recherche essaie, dans cet ordre :
 
-Laissée vide, la recherche essaie le réseau des bornes déjà configurées, sinon
-`192.168.1.0/24` et `192.168.0.0/24`, les réseaux domestiques les plus courants
-(la plupart des box françaises distribuent des adresses en `192.168.1.x`).
+1. le réseau des bornes déjà configurées ;
+2. le réseau de Gladys, trouvé ainsi (le message de la recherche l'affiche :
+   « Réseau de Gladys : 10.0.0.0/24 ») ;
+3. si aucun appareil n'a répondu à Gladys : `192.168.1.0/24` et
+   `192.168.0.0/24`, les réseaux domestiques les plus courants, et le message
+   le dit.
+
+Le champ **Plage de recherche** ne sert que si la borne est sur un autre réseau
+que Gladys, ou si la recherche ne trouve pas le bon. Le bloc « Recherche sur le
+réseau » de la configuration affiche l'adresse par laquelle votre navigateur
+joint Gladys : si c'est `192.168.1.20`, la plage de ce réseau est
+`192.168.1.0/24` (les adresses de `192.168.1.1` à `192.168.1.254`).
 
 Une recherche dure de quelques secondes à une minute. Elle ne sort jamais du
 réseau local : seules les adresses privées sont acceptées, 1 024 au plus.
+Quand aucune borne ne répond, le résultat s'affiche **en rouge**, avec ce qu'il
+faut vérifier.
 
 ## Ce que vous obtenez
 
-| Fonctionnalité             | Détails                                                                            |
-| -------------------------- | ---------------------------------------------------------------------------------- |
-| Connecteur                 | Disponible, occupé (une voiture est branchée), indisponible, en défaut             |
-| État de charge             | En charge, véhicule connecté, en pause (voiture), inactif                          |
-| Statut                     | L'état propre de la borne en toutes lettres (prête, négociation, charge terminée…) |
-| Puissance de charge        | W                                                                                  |
-| Énergie de la session      | kWh délivrés depuis le branchement de la voiture                                   |
-| Énergie totale délivrée    | Index cumulé en kWh, pour le suivi d'énergie de Gladys                             |
-| Tension du réseau, courant | V, A                                                                               |
-| Température de la poignée  | °C ou °F (réglage **Unité de température**)                                        |
+| Fonctionnalité             | Détails                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| Connecteur                 | Disponible, occupé (une voiture est branchée), indisponible, en défaut         |
+| État de charge             | En charge, véhicule connecté, en pause (voiture ou borne), inactif             |
+| Statut                     | L'état propre de la borne en toutes lettres (voir [États](#états-de-la-borne)) |
+| Puissance de charge        | W                                                                              |
+| Énergie de la session      | kWh délivrés depuis le branchement de la voiture                               |
+| Énergie totale délivrée    | Index cumulé en kWh, pour le suivi d'énergie de Gladys                         |
+| Tension du réseau, courant | V, A                                                                           |
+| Température de la poignée  | °C ou °F (réglage **Unité de température**)                                    |
 
 Tout est en lecture seule : l'API locale de la borne ne lance, n'arrête ni ne
 limite une charge (faites-le depuis la voiture ou l'application Tesla).
@@ -106,6 +117,33 @@ manquées de suite, la borne apparaît **injoignable** (pastille sur l'appareil)
 La borne donne des tensions et des courants, pas la puissance : celle-ci est
 calculée phase par phase (triphasé en Europe), ou comme tension × courant sur
 une alimentation nord-américaine 240 V biphasée (reconnue à son réseau 60 Hz).
+
+## États de la borne
+
+La borne donne un numéro d'état (`evse_state`). Leur sens vient de Home
+Assistant, corrigé par ce qu'un utilisateur a relevé sur sa borne en monophasé
+(octobre 2026) :
+
+| État | Statut affiché                      | Situation observée                                                        |
+| ---- | ----------------------------------- | ------------------------------------------------------------------------- |
+| 1    | Véhicule non branché                | Aucun véhicule                                                            |
+| 4    | Prête à charger                     | Tesla branchée, sans charge                                               |
+| 7    | Branchée, hors plage de charge      | Tesla branchée **hors de son planning de charge** : normal, pas un défaut |
+| 8    | Charge terminée                     | (non observé)                                                             |
+| 9    | En attente du véhicule              | Tesla branchée, planning ouvert ; aussi après l'arrêt d'une charge        |
+| 10   | En charge (non Tesla probable)      | Charge du véhicule non Tesla                                              |
+| 11   | En charge                           | Charge de la Tesla                                                        |
+| 12   | Branchée (non Tesla probable)       | Branchement du véhicule non Tesla                                         |
+| 13   | Fin de session (non Tesla probable) | Fin de charge et débranchement du véhicule non Tesla                      |
+| 21   | Fin de session                      | Débranchement de la Tesla                                                 |
+
+L'état 7 n'est affiché comme **Erreur** (connecteur « en défaut », en rouge
+dans le widget) que si aucune voiture n'est branchée ou si la borne signale une
+alerte (`current_alerts`).
+
+**Tesla ou autre véhicule ?** Les états 10, 12 et 13 n'ont été vus qu'avec le
+véhicule d'une autre marque, et 4, 9, 11 et 21 qu'avec la Tesla. Cela vient
+d'un seul test : le statut dit donc « non Tesla probable », sans plus.
 
 ## Suivi d'énergie
 
@@ -122,19 +160,31 @@ principal seul pour le total de la maison.
 ## Tableau de bord
 
 Le widget **Borne Tesla Wall Connector** (Gladys 5.1+), réglé avec la borne à
-afficher : puissance de charge, énergie de la session et totale, courant, état
-de la borne, voiture branchée et durée de la session. Pas de bouton : l'API
-locale ne fait que lire.
+afficher :
+
+- en haut, ce qui bouge en direct : **puissance** et **courant** de charge ;
+- en dessous, l'énergie : **Cette session** quand une voiture est branchée,
+  **Dernière session** sinon (la borne garde l'énergie de la session terminée),
+  et le **Total** délivré, arrondi pour tenir dans sa tuile (en MWh au-delà de
+  1 000 kWh ; la fonctionnalité garde la valeur exacte) ;
+- l'état de la borne et de la voiture, et, voiture branchée, **Branché depuis**
+  (compté par la borne depuis le branchement) et **Durée de charge** (suivie
+  par l'intégration : le temps où la borne a réellement délivré du courant
+  pendant ce branchement, remis à zéro au débranchement).
+
+Pas de bouton : l'API locale ne fait que lire.
 
 ## Scènes
 
 Déclencheurs, chacun limitable à une borne, avec l'énergie de la session en
 kWh :
 
-- **Wall Connector : voiture branchée**
+- **Wall Connector : voiture branchée** (y compris hors du planning de charge)
 - **Wall Connector : voiture débranchée**
 - **La Wall Connector a commencé à charger**
-- **Charge de la Wall Connector terminée**
+- **Charge de la Wall Connector terminée** : la charge s'arrête alors que la
+  voiture reste branchée (fin de charge, planning fermé…) ou se termine par le
+  débranchement (états 13 et 21)
 
 Ils ne se déclenchent que sur un changement observé : un redémarrage de
 l'intégration ne rejoue ni ne perd un événement. Toutes les fonctionnalités
@@ -175,8 +225,9 @@ n'utilisiez l'intégration Tesla que pour la borne, vous pouvez la désinstaller
 - **« Aucune Wall Connector ne répond »** : vérifiez l'adresse IP dans votre
   box et que la borne est bien sur le Wi-Fi (application Tesla One), puis
   cliquez sur **Tester les bornes**.
-- **La recherche ne trouve rien** : vérifiez la **Plage de recherche** (le
-  réseau de la borne, voir plus haut). Une borne sur un autre réseau (un Wi-Fi
+- **La recherche ne trouve rien** : regardez le réseau qu'elle a exploré (dans
+  son message) ; si ce n'est pas celui de la borne, indiquez-le dans **Plage de
+  recherche** (voir plus haut). Une borne sur un autre réseau (un Wi-Fi
   « objets connectés » séparé, un VLAN) se cherche avec la plage de ce réseau,
   si Gladys peut le joindre. Un pare-feu strict sur la machine de Gladys (ufw)
   peut aussi bloquer le trafic des intégrations vers le réseau local.

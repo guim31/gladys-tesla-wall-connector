@@ -7,6 +7,8 @@
 //   - devices                        -> the devices "created by the user"
 //   - publishDiscoveredDevices, publishStates, setConnectionStatus,
 //     publishSceneEvent, requestWidgetRefresh, setConfig -> recorded
+//   - scanNetwork('ssdp')            -> `ssdpAnswers` (the core's mediated
+//     search), or throws when `ssdpAnswers` is an Error
 // -----------------------------------------------------------------------------
 
 export function createFakeGladys({ selector = 'wall-connector' } = {}) {
@@ -19,6 +21,8 @@ export function createFakeGladys({ selector = 'wall-connector' } = {}) {
     transports: [],
     configWrites: [],
     failSetConfig: false,
+    ssdpAnswers: [],
+    networkScans: [],
     publishCalls: 0,
     devices: [],
 
@@ -50,6 +54,12 @@ export function createFakeGladys({ selector = 'wall-connector' } = {}) {
       if (fake.failSetConfig) throw new Error('Gladys refused the configuration');
       fake.configWrites.push(structuredClone(partialConfig));
       return { success: true };
+    },
+
+    async scanNetwork(type, options = {}) {
+      fake.networkScans.push({ type, ...options });
+      if (fake.ssdpAnswers instanceof Error) throw fake.ssdpAnswers;
+      return structuredClone(fake.ssdpAnswers);
     },
 
     async setConnectionStatus(connected, message) {

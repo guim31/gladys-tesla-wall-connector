@@ -49,8 +49,17 @@ export const CHARGING_STATION_STATE = {
 // Gladys `charging-station/connector-status` (OCPP ConnectorStatusEnumType).
 export const CONNECTOR_STATUS = { AVAILABLE: 0, OCCUPIED: 1, UNAVAILABLE: 3, FAULTED: 4 };
 
-// `evse_state` of the vitals (Home Assistant's table), with its text and the
-// charge-session vocabulary the scene triggers share with the cars.
+// `evse_state` of the vitals, with its text and the charge-session vocabulary
+// the scene triggers share with the cars. Home Assistant's table, corrected by
+// the states a user read on a real gen 3 (single phase, a Tesla and a plug-in
+// hybrid of another make, October 2026):
+//   - 7 is a Tesla plugged in OUTSIDE its charging schedule, not an error: an
+//     error only when no car is plugged in or the charger raises an alert
+//     (see `isFault`);
+//   - 9 also follows the end of a charge; 21 is a Tesla being unplugged;
+//   - 10, 12 and 13 were only seen with the non-Tesla car (charging, plugging
+//     in, unplugging): "likely a non-Tesla car", from that single test.
+// No car plugged in (`vehicle_connected: false`) is always "Disconnected".
 export const EVSE_STATES = {
   0: { key: 'booting', en: 'Booting', fr: 'Démarrage' },
   1: {
@@ -62,7 +71,12 @@ export const EVSE_STATES = {
   2: { key: 'connected', en: 'Vehicle connected', fr: 'Véhicule branché', session: 'Stopped' },
   4: { key: 'ready', en: 'Ready to charge', fr: 'Prête à charger', session: 'Stopped' },
   6: { key: 'negotiating', en: 'Negotiating', fr: 'Négociation', session: 'Stopped' },
-  7: { key: 'error', en: 'Error', fr: 'Erreur' },
+  7: {
+    key: 'outside_schedule',
+    en: 'Plugged in, outside charging schedule',
+    fr: 'Branchée, hors plage de charge',
+    session: 'Stopped',
+  },
   8: {
     key: 'charging_finished',
     en: 'Charging finished',
@@ -76,13 +90,27 @@ export const EVSE_STATES = {
     session: 'Stopped',
   },
   10: {
-    key: 'charging_reduced',
-    en: 'Charging (reduced)',
-    fr: 'En charge (réduite)',
+    key: 'charging_other',
+    en: 'Charging (likely non-Tesla)',
+    fr: 'En charge (non Tesla probable)',
     session: 'Charging',
   },
   11: { key: 'charging', en: 'Charging', fr: 'En charge', session: 'Charging' },
+  12: {
+    key: 'connected_other',
+    en: 'Plugged in (likely non-Tesla)',
+    fr: 'Branchée (non Tesla probable)',
+    session: 'Stopped',
+  },
+  13: {
+    key: 'ending_other',
+    en: 'Session ending (likely non-Tesla)',
+    fr: 'Fin de session (non Tesla probable)',
+    session: 'Complete',
+  },
+  21: { key: 'ending', en: 'Session ending', fr: 'Fin de session', session: 'Complete' },
 };
+const FAULT_TEXT = { en: 'Error', fr: 'Erreur' };
 const UNREACHABLE_TEXT = { en: 'Unreachable', fr: 'Injoignable' };
 const UNKNOWN_STATE_TEXT = { en: 'State', fr: 'État' };
 
@@ -124,10 +152,35 @@ export function chargingPowerW(vitals = {}) {
 
 /** The charge-session vocabulary of the cars: Charging, Complete, Stopped, Disconnected. */
 export function sessionState(vitals = {}) {
-  const state = EVSE_STATES[vitals.evse_state];
-  if (state?.session) return state.session;
+  if (isFault(vitals)) return null;
   if (vitals.vehicle_connected === false) return 'Disconnected';
-  return null; // booting, error, unknown: no transition
+  return EVSE_STATES[vitals.evse_state]?.session ?? null; // booting, unknown: no transition
+}
+
+const hasAlerts = (vitals) =>
+  Array.isArray(vitals?.current_alerts) && vitals.current_alerts.length > 0;
+
+/**
+ * A real fault: state 7 with no car plugged in, or any state 7 with an alert.
+ * State 7 with a car and no alert is a car waiting for its charging schedule.
+ * `evse_not_ready_reasons` is not used: a car held back by its schedule is
+ * "not ready" too, so a reason there is no sign of an error.
+ */
+export function isFault(vitals = {}) {
+  return vitals.evse_state === 7 && (vitals.vehicle_connected !== true || hasAlerts(vitals));
+}
+
+/** A car is drawing power: the contactor is closed (else the charging states). */
+export function isCharging(vitals = {}) {
+  if (typeof vitals.contactor_closed === 'boolean') return vitals.contactor_closed;
+  return EVSE_STATES[vitals.evse_state]?.session === 'Charging';
+}
+
+/** The state of the vitals as text, `{ en, fr }` (null when unknown). */
+export function stateText(vitals = {}) {
+  if (isFault(vitals)) return FAULT_TEXT;
+  const state = EVSE_STATES[vitals.evse_state];
+  return state ? { en: state.en, fr: state.fr } : null;
 }
 
 /** Temperature unit: the setting, or the grid (60 Hz: °F) when "auto". */
@@ -237,7 +290,7 @@ export function buildWallConnectorDevice(gladys, version, { language, temperatur
 /** The status text, in the configured language. */
 export function statusText(language, vitals, reachable = true) {
   if (!reachable) return UNREACHABLE_TEXT[language] ?? UNREACHABLE_TEXT.en;
-  const state = EVSE_STATES[vitals?.evse_state];
+  const state = stateText(vitals ?? {});
   if (state) return state[language] ?? state.en;
   const label = UNKNOWN_STATE_TEXT[language] ?? UNKNOWN_STATE_TEXT.en;
   return Number.isFinite(vitals?.evse_state) ? `${label} ${vitals.evse_state}` : null;
@@ -245,7 +298,7 @@ export function statusText(language, vitals, reachable = true) {
 
 function connectorStatus(vitals, reachable) {
   if (!reachable || vitals.evse_state === 0) return CONNECTOR_STATUS.UNAVAILABLE;
-  if (vitals.evse_state === 7) return CONNECTOR_STATUS.FAULTED;
+  if (isFault(vitals)) return CONNECTOR_STATUS.FAULTED;
   if (vitals.vehicle_connected === true) return CONNECTOR_STATUS.OCCUPIED;
   if (vitals.vehicle_connected === false) return CONNECTOR_STATUS.AVAILABLE;
   return null;
@@ -259,12 +312,18 @@ function chargingState(vitals) {
     case 2:
     case 4:
     case 6:
+    case 12:
       return CHARGING_STATION_STATE.EV_CONNECTED;
+    // Held back by the charger's schedule (OCPP SuspendedEVSE).
+    case 7:
+      return isFault(vitals) ? null : CHARGING_STATION_STATE.PAUSED_BY_CHARGER;
     case 9:
       return CHARGING_STATION_STATE.PAUSED_BY_VEHICLE;
     // Gladys's charge session enum expects "idle" only with a car plugged in
     // (OCCUPIED): no car (state 1), nothing is published.
     case 8:
+    case 13:
+    case 21:
       return vitals.vehicle_connected === false ? null : CHARGING_STATION_STATE.IDLE;
     default:
       return null;
