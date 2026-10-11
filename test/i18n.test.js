@@ -237,3 +237,34 @@ test('sent to Gladys: widget contents, statuses and action results in the four l
   for (const { path, text } of texts) assertText(text, path);
   await runtime.stop();
 });
+
+test('German: "du" everywhere, never the polite "Sie"', () => {
+  // The rule kept for every integration of the maintainer, as most of the
+  // German interface of Gladys. A capitalized "Sie" or "Ihr…" is the polite
+  // form mid-sentence and ambiguous at its start (it may mean "she"): both
+  // are refused, rephrase the sentence. The lowercase "ihr/ihre" (their) is fine.
+  const POLITE = /\b(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer|Ihres)\b/;
+  const texts = [
+    ...collectTexts(manifest, 'manifest'),
+    ...collectTexts(FEATURE_NAMES, 'FEATURE_NAMES'),
+    ...collectTexts(STATE_TEXTS, 'STATE_TEXTS'),
+    ...collectTexts(WIDGET_TEXTS, 'WIDGET_TEXTS'),
+    ...Object.entries(EVSE_STATES).map(([state, entry]) => ({
+      path: `EVSE_STATES.${state}`,
+      text: { de: entry.de },
+    })),
+    ...Object.entries(MESSAGES).flatMap(([key, entry]) =>
+      (typeof entry === 'function'
+        ? MESSAGE_SAMPLES[key].map((args) => entry(...args))
+        : [entry]
+      ).map((text) => ({ path: `MESSAGES.${key}`, text })),
+    ),
+  ];
+  assert.ok(texts.length > 100, `${texts.length} texts`);
+  for (const { path, text } of texts) {
+    assert.doesNotMatch(text.de, POLITE, `${path}.de`);
+  }
+  // The check itself catches the polite form.
+  assert.match('Prüfen Sie die Adresse.', POLITE);
+  assert.doesNotMatch('aus ihren Adressen', POLITE);
+});
