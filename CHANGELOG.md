@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-11
+
 ### Added
 
 - German and Spanish, the other two languages of the Gladys interface: the
@@ -90,6 +92,7 @@ the notes of the version's GitHub Release.
   the same feature, trigger and widget keys; the documentation explains how to
   move a charger from one integration to the other.
 
-[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/guim31/gladys-tesla-wall-connector/releases/tag/v1.0.1
