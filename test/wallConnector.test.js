@@ -26,7 +26,8 @@ import {
 } from '../src/devices/wallConnector.js';
 import { createRuntime, WALL_CONNECTOR_POLL_MS } from '../src/runtime.js';
 import { normalizeConfig } from '../src/config.js';
-import { createWidgets, duration, energyText, totalEnergy } from '../src/widgets.js';
+import { LANGUAGES } from '../src/i18n.js';
+import { createWidgets, duration, energyText, sessionEnergy, totalEnergy } from '../src/widgets.js';
 import { createFakeGladys } from './helpers/fakeGladys.js';
 import { createMemoryStore } from './helpers/memoryStore.js';
 import { SCENE_TRIGGERS, wallConnectorTransitions } from '../src/triggers.js';
@@ -644,8 +645,7 @@ test('the charging time counts from the contactor, not from plugging in', async 
   assert.equal((await rows())['Durée de charge'], '0 min', 'plugged in, not charging yet');
   net.set(WC_HOSTS.EU, { vitals: { ...charging, session_s: 2235 } });
   await poll();
-  const { 'Cette session': session, Total: total, ...others } = await rows();
-  assert.equal(session.fr, '0,31 kWh');
+  const { Total: total, ...others } = await rows();
   assert.equal(total.fr, '386 kWh');
   assert.deepEqual(others, {
     Statut: { en: 'Charging', fr: 'En charge', de: 'Lädt', es: 'Cargando' },
@@ -664,7 +664,7 @@ test('the charging time counts from the contactor, not from plugging in', async 
   // Unplugged: reset, and the durations leave the widget.
   net.set(WC_HOSTS.EU, { vitals: vitalsOf(sequences.tesla[8]) });
   await poll();
-  assert.deepEqual(Object.keys(await rows()), ['Dernière session', 'Total', 'Statut', 'Véhicule']);
+  assert.deepEqual(Object.keys(await rows()), ['Total', 'Statut', 'Véhicule']);
   net.set(WC_HOSTS.EU, { vitals: { ...charging, session_s: 30 } });
   await poll();
   await poll(60 * 1000);
@@ -673,10 +673,10 @@ test('the charging time counts from the contactor, not from plugging in', async 
   await runtime.stop();
 });
 
-test('widget: two tiles on one line (power, current), then the session and the total', async () => {
+test('widget: three tiles on one line (power, current, session), then the total', async () => {
   // Gladys 5.1.4 puts every `value` component in one wrapping row of tiles
-  // (3 per line on a usual dashboard column, no column setting): two tiles
-  // only, the energies as the first rows of the status list under them.
+  // (3 per line on a usual dashboard column, no column setting): three tiles,
+  // the total as the first row of the status list under them.
   const { runtime, net, poll } = await setup();
   const widgets = createWidgets(runtime);
   const content = async () => widgets.wall_connector.get({ settings: { device: EU } });
@@ -686,34 +686,38 @@ test('widget: two tiles on one line (power, current), then the session and the t
   const rows = (c) => c.components.find((component) => component.type === 'status').items;
 
   let widget = await content();
-  assert.deepEqual(layout(widget), ['value', 'value', 'status']);
+  assert.deepEqual(layout(widget), ['value', 'value', 'value', 'status']);
   assert.deepEqual(
-    tiles(widget).map((tile) => [tile.label.fr, tile.device_feature]),
+    tiles(widget).map((tile) => [tile.label.fr, tile.device_feature ?? tile.value, tile.unit]),
     [
-      ['Puissance', `${EU}:power`],
-      ['Courant', `${EU}:current`],
+      ['Puissance', `${EU}:power`, undefined],
+      ['Courant', `${EU}:current`, undefined],
+      ['Session finie', 0, 'kWh'],
     ],
   );
   assert.deepEqual(
-    rows(widget)
-      .slice(0, 2)
-      .map((row) => [row.label.fr, row.value.fr]),
-    [
-      ['Dernière session', '0 kWh'],
-      ['Total', '386 kWh'],
-    ],
+    rows(widget).map((row) => row.label.fr),
+    ['Total', 'Statut', 'Véhicule'],
   );
+  assert.deepEqual(rows(widget)[0].value, {
+    en: '386 kWh',
+    fr: '386 kWh',
+    de: '386 kWh',
+    es: '386 kWh',
+  });
   net.set(WC_HOSTS.EU, { vitals: wcFixture('vitals_eu_charging') });
   await poll();
   widget = await content();
+  assert.deepEqual(tiles(widget)[2], {
+    type: 'value',
+    label: { en: 'This session', fr: 'Cette session', de: 'Diese Sitzung', es: 'Esta sesión' },
+    icon: 'battery-charging',
+    value: 11.3,
+    unit: 'kWh',
+  });
   assert.deepEqual(
-    rows(widget)
-      .slice(0, 2)
-      .map((row) => [row.label.fr, row.value.fr, row.value.en, row.value.de]),
-    [
-      ['Cette session', '11,29 kWh', '11.29 kWh', '11,29 kWh'],
-      ['Total', '386 kWh', '386 kWh', '386 kWh'],
-    ],
+    rows(widget).map((row) => row.label.fr),
+    ['Total', 'Statut', 'Véhicule', 'Branché depuis', 'Durée de charge'],
   );
   // Within the budget of the core: 8 components, 6 tiles, 2 texts, 4 buttons.
   assert.ok(widget.components.length <= 8);
@@ -725,18 +729,54 @@ test('widget: two tiles on one line (power, current), then the session and the t
   await runtime.stop();
 });
 
-test('widget: the total is short; durations in every language', () => {
-  assert.deepEqual(totalEnergy(8596.731), { value: 8.6, unit: 'MWh' });
-  assert.deepEqual(totalEnergy(12345.6), { value: 12.35, unit: 'MWh' });
+test('widget: the session energy fits a third of a line, from 0 to 100 kWh', () => {
+  // A tile is at least 96 px wide when three share a line: 4 characters for
+  // the number, its unit after it (see the top of src/widgets.js). Written
+  // as the front of Gladys 5.1.4 writes it (formatNumber of
+  // widgetContentUtils.js), in every language.
+  const front = (value, language) =>
+    new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(value);
+  for (let wh = 0; wh <= 100000; wh += 5) {
+    const { value, unit } = sessionEnergy(wh);
+    assert.equal(unit, 'kWh');
+    for (const language of LANGUAGES) {
+      const text = front(value, language);
+      assert.ok(text.length <= 4, `${wh} Wh: '${text}' (${language})`);
+    }
+  }
+  assert.deepEqual(sessionEnergy(0), { value: 0, unit: 'kWh' });
+  assert.deepEqual(sessionEnergy(11290), { value: 11.3, unit: 'kWh' });
+  assert.deepEqual(sessionEnergy(99949), { value: 99.9, unit: 'kWh' });
+  assert.deepEqual(sessionEnergy(99950), { value: 100, unit: 'kWh' });
+  assert.deepEqual(sessionEnergy(123456), { value: 123, unit: 'kWh' });
+  assert.deepEqual(sessionEnergy(undefined), { value: '—' });
+  assert.equal(front(11.3, 'fr'), '11,3');
+  assert.equal(front(0, 'de'), '0');
+});
+
+test('widget: the total in whole kWh, MWh from 100,000 kWh; durations in every language', () => {
+  assert.deepEqual(totalEnergy(8596.731), { value: 8597, unit: 'kWh' });
   assert.deepEqual(totalEnergy(386.204), { value: 386, unit: 'kWh' });
-  assert.deepEqual(totalEnergy(41.72), { value: 41.7, unit: 'kWh' });
+  assert.deepEqual(totalEnergy(41.72), { value: 42, unit: 'kWh' });
+  assert.deepEqual(totalEnergy(99999.4), { value: 99999, unit: 'kWh' });
+  assert.deepEqual(totalEnergy(100000), { value: 100, unit: 'MWh' });
+  assert.deepEqual(totalEnergy(123456.7), { value: 123.5, unit: 'MWh' });
   assert.deepEqual(totalEnergy(null), { value: '—' });
+  // The thousands separator of each language (CLDR: Spanish groups from
+  // five digits only).
   assert.deepEqual(energyText(totalEnergy(8596.731)), {
-    en: '8.6 MWh',
-    fr: '8,6 MWh',
-    de: '8,6 MWh',
-    es: '8,6 MWh',
+    en: '8,597 kWh',
+    fr: '8\u202f597 kWh',
+    de: '8.597 kWh',
+    es: '8597 kWh',
   });
+  assert.deepEqual(energyText(totalEnergy(23456)), {
+    en: '23,456 kWh',
+    fr: '23\u202f456 kWh',
+    de: '23.456 kWh',
+    es: '23.456 kWh',
+  });
+  assert.equal(energyText(totalEnergy(123456.7)).fr, '123,5 MWh');
   assert.equal(energyText(totalEnergy(null)), '—');
   assert.equal(duration(2220), '37 min');
   assert.equal(duration(3725), '1 h 02 min');

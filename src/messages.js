@@ -176,7 +176,7 @@ export const WIDGET_TEXTS = {
   // Tiles
   power: { en: 'Power', fr: 'Puissance', de: 'Leistung', es: 'Potencia' },
   current: { en: 'Current', fr: 'Courant', de: 'Strom', es: 'Corriente' },
-  // Status rows
+  // At most 14 characters: 'Dernière session' is cut in a third of a line.
   thisSession: {
     en: 'This session',
     fr: 'Cette session',
@@ -185,10 +185,11 @@ export const WIDGET_TEXTS = {
   },
   lastSession: {
     en: 'Last session',
-    fr: 'Dernière session',
+    fr: 'Session finie',
     de: 'Letzte Sitzung',
     es: 'Última sesión',
   },
+  // Status rows
   total: { en: 'Total', fr: 'Total', de: 'Gesamt', es: 'Total' },
   status: { en: 'Status', fr: 'Statut', de: 'Status', es: 'Estado' },
   unreachable: { en: 'Unreachable', fr: 'Injoignable', de: 'Nicht erreichbar', es: 'Inaccesible' },

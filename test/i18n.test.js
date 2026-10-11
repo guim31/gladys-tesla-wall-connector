@@ -168,15 +168,16 @@ test('code: action and status messages in the four languages', () => {
 });
 
 test('code: widget texts in the four languages, short enough for their place', () => {
-  // The core cuts a tile label at 24 characters, a status label at 40, and a
-  // body text at 300.
-  const TILES = ['power', 'current'];
+  // The core cuts a status label at 40 characters and a body text at 300. A
+  // tile label is cut by the front at the width of its tile, a third of a
+  // line: 14 characters (measured, see the top of src/widgets.js).
+  const TILES = ['power', 'current', 'thisSession', 'lastSession'];
   const BODIES = ['pickDevice', 'notWallConnector'];
   for (const [key, text] of Object.entries(WIDGET_TEXTS)) {
     assertText(
       text,
       `WIDGET_TEXTS.${key}`,
-      TILES.includes(key) ? 24 : BODIES.includes(key) ? 300 : 40,
+      TILES.includes(key) ? 14 : BODIES.includes(key) ? 300 : 40,
     );
   }
 });
