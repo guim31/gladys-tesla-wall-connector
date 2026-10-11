@@ -12,10 +12,13 @@ test('an empty configuration gets the defaults', () => {
 });
 
 test('unknown choices fall back to the defaults', () => {
-  const config = normalizeConfig({ units: 'kelvin', language: 'de' });
+  const config = normalizeConfig({ units: 'kelvin', language: 'it' });
   assert.equal(config.units, 'auto');
   assert.equal(config.language, 'en');
   assert.equal(normalizeConfig({ units: 'imperial' }).units, 'imperial');
+  for (const language of ['en', 'fr', 'de', 'es']) {
+    assert.equal(normalizeConfig({ language }).language, language);
+  }
 });
 
 test('addresses and range are kept as typed, the addresses parsed on use', () => {

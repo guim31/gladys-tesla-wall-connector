@@ -15,8 +15,11 @@
 import { DEVICE_TRANSPORTS, createLogger } from '@gladysassistant/integration-sdk';
 import { wallConnectorHosts } from './config.js';
 import {
+  HISTORY_REFRESH_MS,
+  HISTORY_THRESHOLDS,
   WALL_CONNECTOR_FEATURES,
   buildWallConnectorDevice,
+  isSignificantChange,
   isCharging,
   sessionState,
   stateText,
@@ -34,6 +37,8 @@ import {
   subnet24,
 } from './wallConnector/scan.js';
 import { wallConnectorTransitions } from './triggers.js';
+import { createLines } from './i18n.js';
+import { MESSAGES } from './messages.js';
 
 const MINUTE = 60 * 1000;
 const MAX_STATES_PER_REQUEST = 100;
@@ -47,16 +52,7 @@ const WALL_CONNECTOR_MAX_FAILURES = 3;
 // Widget key (manifest `widgets`), nudged when its computed rows change.
 export const WIDGET_KEY = 'wall_connector';
 
-export const STATUS_MESSAGES = {
-  noCharger: {
-    en: 'Enter the address of your Wall Connector, or use “Search for Wall Connectors” below.',
-    fr: 'Saisissez l’adresse de votre borne, ou utilisez « Rechercher les bornes » ci-dessous.',
-  },
-  unreachable: {
-    en: 'No Wall Connector answers on the home network: check the addresses.',
-    fr: 'Aucune Wall Connector ne répond sur le réseau local : vérifiez les adresses.',
-  },
-};
+export const STATUS_MESSAGES = { noCharger: MESSAGES.noCharger, unreachable: MESSAGES.unreachable };
 
 const lastDigits = (serial) => `…${String(serial).slice(-4)}`;
 
@@ -67,7 +63,8 @@ const SSDP_TIMEOUT_SECONDS = 3;
 /**
  * An action that failed: thrown, so Gladys shows the message in red. The core
  * (5.1.4) relays the thrown `message` untouched up to the browser, which picks
- * the user's language in a `{ en, fr }` object; it has no "warning" level.
+ * the user's language in a `{ en, fr, de, es }` object; it has no "warning"
+ * level.
  */
 export class ActionFailure extends Error {
   constructor(message) {
@@ -87,7 +84,7 @@ export function createRuntime({
   let config = null;
   let publishedDevicesJson = null;
   let searching = false;
-  const published = new Map(); // feature external_id → serialized value
+  const published = new Map(); // feature external_id → { serialized, value, at }
   const nudge = { at: 0, timer: null };
   // host → { host, client, serial, version, vitals, energyKwh, reachable, failures, lastLifetimeAt }
   const wallConnectors = new Map();
@@ -142,19 +139,34 @@ export function createRuntime({
 
   // --- Publishing ------------------------------------------------------------
 
+  /** Whether a state is worth sending after the last accepted publication. */
+  function worthPublishing(key, value, serialized, last, temperatureUnit) {
+    if (!last) return true;
+    // Measurements: a significant change only, or the value once an hour.
+    if (HISTORY_THRESHOLDS[key]) {
+      return (
+        now() - last.at >= HISTORY_REFRESH_MS ||
+        isSignificantChange(key, last.value, value, { temperatureUnit })
+      );
+    }
+    return last.serialized !== serialized;
+  }
+
   /**
-   * Publish the states whose value changed since the last accepted
-   * publication. States of devices the user has not created yet are kept for
-   * later: Gladys would drop them (they are re-sent by onDeviceCreated).
+   * Publish the states worth it since the last accepted publication (see
+   * `worthPublishing`). States of devices the user has not created yet are
+   * kept for later: Gladys would drop them (they are re-sent by
+   * onDeviceCreated).
    */
-  async function publishChanged(deviceExternalId, states, { force = false } = {}) {
+  async function publishChanged(deviceExternalId, states, { force = false, temperatureUnit } = {}) {
     const devicesKnown = Array.isArray(gladys.devices);
     if (devicesKnown && !createdDevice(deviceExternalId)) return 0;
     const changed = [];
     for (const { key, value } of states) {
       const externalId = `${deviceExternalId}:${key}`;
       const serialized = JSON.stringify(value);
-      if (!force && published.get(externalId) === serialized) continue;
+      const last = published.get(externalId);
+      if (!force && !worthPublishing(key, value, serialized, last, temperatureUnit)) continue;
       changed.push({ externalId, serialized, value });
     }
     for (let i = 0; i < changed.length; i += MAX_STATES_PER_REQUEST) {
@@ -167,7 +179,10 @@ export function createRuntime({
               : { device_feature_external_id: externalId, state: value },
           ),
         );
-        for (const { externalId, serialized } of batch) published.set(externalId, serialized);
+        const at = now();
+        for (const { externalId, serialized, value } of batch) {
+          published.set(externalId, { serialized, value, at });
+        }
       } catch (err) {
         // Not remembered: the next change (or reconnection) sends it again.
         logger.warn(`Publishing ${batch.length} state(s) failed: ${err.message}`);
@@ -176,17 +191,15 @@ export function createRuntime({
     return changed.length;
   }
 
-  async function publishWallConnector(wc, options) {
+  async function publishWallConnector(wc, options = {}) {
     if (!wc.serial) return 0;
     const built = wallConnectorDevice(wc);
-    const states = wallConnectorStates(wc, {
-      language: config.language,
-      temperatureUnit: unitResolver(
-        built.external_id,
-        built,
-      )(WALL_CONNECTOR_FEATURES.HANDLE_TEMPERATURE),
-    });
-    return publishChanged(built.external_id, states, options);
+    const temperatureUnit = unitResolver(
+      built.external_id,
+      built,
+    )(WALL_CONNECTOR_FEATURES.HANDLE_TEMPERATURE);
+    const states = wallConnectorStates(wc, { language: config.language, temperatureUnit });
+    return publishChanged(built.external_id, states, { ...options, temperatureUnit });
   }
 
   async function publishTransports() {
@@ -488,12 +501,7 @@ export function createRuntime({
 
   async function searchWallConnectors() {
     if (!config) return STATUS_MESSAGES.noCharger;
-    if (searching) {
-      return {
-        en: 'A search is already running, wait for its result.',
-        fr: 'Une recherche est déjà en cours, attendez son résultat.',
-      };
-    }
+    if (searching) return MESSAGES.searchRunning;
     searching = true;
     try {
       return await search();
@@ -507,38 +515,17 @@ export function createRuntime({
     const targets = await scanTargets();
     if (targets.invalid.length || targets.notPrivate.length || targets.tooLarge) {
       const bad = [...targets.invalid, ...targets.notPrivate].join(', ');
-      throw new ActionFailure({
-        en:
-          `The search range of the configuration is not usable${bad ? ` (${bad})` : ''}.\n` +
-          'Give private addresses of your home network, 1,024 at most: a network such as 192.168.1.0/24, or a range such as 192.168.1.10-192.168.1.60.',
-        fr:
-          `La plage de recherche de la configuration est inutilisable${bad ? ` (${bad})` : ''}.\n` +
-          'Indiquez des adresses privées de votre réseau local, 1 024 au plus : un réseau comme 192.168.1.0/24, ou une plage comme 192.168.1.10-192.168.1.60.',
-      });
+      throw new ActionFailure(MESSAGES.badRange(bad));
     }
     logger.info(`Searching ${targets.addresses.length} addresses for Wall Connectors`);
     const result = await scan({ addresses: targets.addresses });
     const seconds = Math.max(1, Math.round((now() - startedAt) / 1000));
     const where = targets.ranges.join(', ');
-    const lines = { en: [], fr: [] };
-    lines.en.push(`${result.scanned} addresses searched (${where}) in ${seconds} s.`);
-    lines.fr.push(`${result.scanned} adresses explorées (${where}) en ${seconds} s.`);
-    if (targets.lan?.length) {
-      lines.en.push(`Network of Gladys: ${targets.lan.join(', ')}.`);
-      lines.fr.push(`Réseau de Gladys : ${targets.lan.join(', ')}.`);
-    }
-    if (targets.source === 'default') {
-      lines.en.push(
-        'The network of Gladys could not be found (no device answered its SSDP search): the two most common home networks were tried.',
-      );
-      lines.fr.push(
-        'Le réseau de Gladys n’a pas pu être trouvé (aucun appareil n’a répondu à sa recherche SSDP) : les deux réseaux domestiques les plus courants ont été essayés.',
-      );
-    }
-    if (!result.complete) {
-      lines.en.push('The search ran out of time before the end of the range.');
-      lines.fr.push('La recherche a manqué de temps avant la fin de la plage.');
-    }
+    const lines = createLines();
+    lines.add(MESSAGES.searched(result.scanned, where, seconds));
+    if (targets.lan?.length) lines.add(MESSAGES.gladysNetwork(targets.lan.join(', ')));
+    if (targets.source === 'default') lines.add(MESSAGES.defaultNetworks);
+    if (!result.complete) lines.add(MESSAGES.searchIncomplete);
 
     // Merge into the configured addresses: a known serial at a new address
     // (DHCP) replaces its old address, a new charger is appended.
@@ -550,42 +537,27 @@ export function createRuntime({
     }
     let changed = false;
     const outcome = (wc) => {
-      if (hosts.includes(wc.host)) return { en: 'already configured', fr: 'déjà configurée' };
+      if (hosts.includes(wc.host)) return MESSAGES.alreadyConfigured;
       const previous = serialAt.get(wc.serial);
       const index = previous ? hosts.indexOf(previous) : -1;
       changed = true;
       if (index >= 0) {
         hosts[index] = wc.host;
-        return {
-          en: `new address, replaces ${previous}`,
-          fr: `nouvelle adresse, remplace ${previous}`,
-        };
+        return MESSAGES.newAddress(previous);
       }
       hosts.push(wc.host);
-      return { en: 'added to the configuration', fr: 'ajoutée à la configuration' };
+      return MESSAGES.added;
     };
     const found = result.found.map((wc) => ({ wc, outcome: outcome(wc) }));
 
     if (found.length === 0) {
-      lines.en.push(
-        'No Wall Connector answered.',
-        'Check that the charger is connected to your Wi-Fi (Tesla One app), then set the range of your home network in the configuration (e.g. 192.168.1.0/24), or type the charger address.',
-      );
-      lines.fr.push(
-        'Aucune Wall Connector n’a répondu.',
-        'Vérifiez que la borne est connectée à votre Wi-Fi (application Tesla One), puis indiquez la plage de votre réseau dans la configuration (ex. 192.168.1.0/24), ou saisissez l’adresse de la borne.',
-      );
-      throw new ActionFailure({ en: lines.en.join('\n'), fr: lines.fr.join('\n') });
+      lines.add(MESSAGES.noneFound);
+      lines.add(MESSAGES.noneFoundHelp);
+      throw new ActionFailure(lines.text());
     }
-    lines.en.push(`Wall Connector(s) found: ${found.length}.`);
-    lines.fr.push(`Borne(s) trouvée(s) : ${found.length}.`);
+    lines.add(MESSAGES.foundCount(found.length));
     for (const { wc, outcome: o } of found) {
-      lines.en.push(
-        `• ${wc.host}: serial ${lastDigits(wc.serial)}, firmware ${wc.firmware}, ${o.en}.`,
-      );
-      lines.fr.push(
-        `• ${wc.host} : numéro de série ${lastDigits(wc.serial)}, firmware ${wc.firmware}, ${o.fr}.`,
-      );
+      lines.add(MESSAGES.foundLine(wc.host, lastDigits(wc.serial), wc.firmware, o));
     }
     if (changed) {
       const value = hosts.join(', ');
@@ -593,21 +565,13 @@ export function createRuntime({
         // No config-updated echo for the integration's own write: apply it here.
         await gladys.setConfig({ wall_connectors: value });
         await reconfigure({ ...config, wall_connectors: value });
-        lines.en.push(
-          'The chargers now appear in the Discovery tab. Reload this page before saving the configuration form, or it would put back the old addresses.',
-        );
-        lines.fr.push(
-          'Les bornes apparaissent maintenant dans l’onglet Découverte. Rechargez cette page avant d’enregistrer le formulaire de configuration, sinon il remettrait les anciennes adresses.',
-        );
+        lines.add(MESSAGES.saved);
       } catch (err) {
         logger.warn(`Saving the found addresses failed: ${err.message}`);
-        lines.en.push(`The configuration could not be saved: type these addresses: ${value}`);
-        lines.fr.push(
-          `La configuration n’a pas pu être enregistrée : saisissez ces adresses : ${value}`,
-        );
+        lines.add(MESSAGES.saveFailed(value));
       }
     }
-    return { en: lines.en.join('\n'), fr: lines.fr.join('\n') };
+    return lines.text();
   }
 
   // --- Public API ------------------------------------------------------------
@@ -661,32 +625,22 @@ export function createRuntime({
     /** Test action: what each configured address answers. */
     async testWallConnectors() {
       const hosts = config ? wallConnectorHosts(config) : [];
-      if (hosts.length === 0) {
-        return {
-          en: 'No Wall Connector address in the configuration: type one, or use “Search for Wall Connectors”.',
-          fr: 'Aucune adresse de borne dans la configuration : saisissez-en une, ou utilisez « Rechercher les bornes ».',
-        };
-      }
-      const lines = { en: [], fr: [] };
+      if (hosts.length === 0) return MESSAGES.noAddress;
+      const lines = createLines();
       for (const host of hosts) {
         const probe = wallClientFactory({ host });
         try {
           const version = await probe.version();
           const vitals = await probe.vitals();
-          const state = stateText(vitals ?? {});
+          const state = stateText(vitals ?? {}) ?? MESSAGES.stateNumber(vitals?.evse_state);
           const serial = String(version?.serial_number ?? '?');
-          lines.en.push(
-            `${host}: Wall Connector ${lastDigits(serial)}, firmware ${version?.firmware_version ?? '?'}, ${state?.en ?? `state ${vitals?.evse_state}`}.`,
-          );
-          lines.fr.push(
-            `${host} : Wall Connector ${lastDigits(serial)}, firmware ${version?.firmware_version ?? '?'}, ${state?.fr ?? `état ${vitals?.evse_state}`}.`,
-          );
+          const firmware = version?.firmware_version ?? '?';
+          lines.add(MESSAGES.testLine(host, lastDigits(serial), firmware, state));
         } catch (err) {
-          lines.en.push(`${host}: no answer (${err.message}).`);
-          lines.fr.push(`${host} : pas de réponse (${err.message}).`);
+          lines.add(MESSAGES.noAnswer(host, err.message));
         }
       }
-      return { en: lines.en.join('\n'), fr: lines.fr.join('\n') };
+      return lines.text();
     },
 
     /** Read access for the widget. */

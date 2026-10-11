@@ -10,6 +10,31 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+### Added
+
+- German and Spanish, the other two languages of the Gladys interface: the
+  manifest (configuration, actions, scene triggers, widget), the action and
+  status messages, the widget, the charger states, and the feature names
+  ("Device names language" setting). The user documentation stays in English
+  and French, the only two the store re-hosts.
+
+### Changed
+
+- Widget: the power and current tiles side by side on one line, then the
+  session energy and the total as the first rows under them. Gladys 5.1.4 puts
+  every tile in one row that wraps after three, with no column setting: four
+  tiles showed three plus one.
+- History: the power, the vehicle current, the grid voltage and the handle
+  temperature are sent to Gladys only on a significant change (50 W, or 2 %
+  during a charge; 0.5 A; 2 V; 1 °C), on the return to 0 for the power and the
+  current, and once an hour. A real charger stored 2,827 voltage values in
+  under 12 hours; expect a few dozen a day now.
+
+### Fixed
+
+- "Charging state" no longer stays on "Charging" once the car is unplugged: it
+  turns to "Idle".
+
 ## [1.1.0] - 2026-10-11
 
 ### Added

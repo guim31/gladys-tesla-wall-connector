@@ -132,6 +132,12 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
   fonctionnalité. `gauge_min`/`gauge_max` ne pilotent que les couleurs, et le cœur n'applique
   jamais `min`/`max` en écriture : ce sont des bornes d'affichage. Une valeur signée exige des
   bornes symétriques.
+- **Un état publié ne s'efface pas** (pas de `null`) : une fonctionnalité qui n'a « pas de valeur »
+  hors session, comme `charging-station/charging-state`, garde la dernière. Publier `IDLE` au
+  débranchement.
+- Gladys garde **chaque** état reçu : une mesure publiée à chaque lecture de 15 s fait 5 760 états
+  par jour (2 827 en 12 h pour une tension, test réel). Seuils de changement significatif et
+  republication horaire (`HISTORY_THRESHOLDS` de la borne).
 - Le cœur plafonne à **300 états par minute** et réévalue les scènes à chaque état : ne publier
   que les changements.
 - Une intégration `device` ne reçoit pas la langue de l'utilisateur, une action de scène non
@@ -156,6 +162,11 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
   fonctions non publiées. Les boutons de widget qui ouvrent un formulaire (#3168, commit 3feb2cf8)
   sont absents de la 5.1.4 : le bouton s'affiche et n'envoie rien. Vérifier par `git tag --contains`.
 
+- **Tuiles d'un widget (5.1.4)** : le front range **toutes** les composantes `value` et `gauge` dans
+  une seule rangée qui passe à la ligne (`splitIntoSlots`, `.tile { flex: 1 1 96px }`), quel que
+  soit l'ordre ou le découpage du contenu, sans réglage du nombre de colonnes. Sur une colonne de
+  tableau de bord courante : 3 tuiles par ligne, donc 4 tuiles = 3 + 1. Pour deux par ligne,
+  deux tuiles seulement, le reste en lignes de `status`.
 - Un réglage de widget ne propose en liste que les **appareils** de l'intégration
   (`source: "devices"`, seule source dynamique).
 - Budget du cœur : **8 composants par widget, dont 2 textes au plus**, appliqué **avant** la
@@ -221,6 +232,10 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
 
 ## Store
 
+- **Langues** : l'interface de Gladys existe en `en`, `fr`, `de`, `es` ; un texte sans la langue
+  de l'utilisateur s'affiche en anglais. Le store ne ré-héberge que `docs/en.md` et `docs/fr.md`
+  (`DOCS_LANGUAGES`) : pas de `docs/de.md` ni `docs/es.md`. `test/i18n.test.js` exige les quatre
+  langues partout. Registre du cœur : tutoiement en allemand, vouvoiement en espagnol.
 - Validateur officiel, depuis la racine : `npx -y github:GladysAssistant/integration-store .`
   (schéma, `description` **100 caractères au plus par langue**, documentation de 300 caractères
   au moins, image Docker, cover de **150 Ko au plus**). Il demande Node ≥ 24 mais tourne sous

@@ -18,7 +18,7 @@ import {
   DEVICE_FEATURE_UNITS as UNITS,
 } from '@gladysassistant/integration-sdk';
 import { UNIT_SYSTEMS } from '../config.js';
-import { t } from '../i18n.js';
+import { LANGUAGES, t } from '../i18n.js';
 import { celsiusToFahrenheit, round } from '../units.js';
 
 export const WALL_CONNECTOR_DEVICE_TYPE = 'wall-connector';
@@ -36,6 +36,47 @@ export const WALL_CONNECTOR_FEATURES = {
   CURRENT: 'current',
   HANDLE_TEMPERATURE: 'handle-temperature',
 };
+
+// History: the grid voltage, the current, the handle temperature and the
+// power move a little at every read (every 15 s), and Gladys keeps each state
+// it receives: a real charger stored 2,827 voltage states in under 12 hours.
+// Only a significant change is published, measured from the last value
+// published, so a slow drift still gets through; and, for the power and the
+// current, the return to 0 (the end of a charge). During a charge, the power
+// moves by 2 % (150 W at 7.4 kW) before a state, the noise of the current
+// (±0.3 A at 32 A, ±100 W) would otherwise publish every other read.
+// src/runtime.js republishes the current value once an hour, so Gladys never
+// sees the feature as stale.
+export const HISTORY_THRESHOLDS = {
+  [WALL_CONNECTOR_FEATURES.POWER]: { step: 50, relative: 0.02, zero: true }, // W
+  [WALL_CONNECTOR_FEATURES.CURRENT]: { step: 0.5, zero: true }, // A
+  [WALL_CONNECTOR_FEATURES.VOLTAGE]: { step: 2 }, // V
+  [WALL_CONNECTOR_FEATURES.HANDLE_TEMPERATURE]: { step: 1 }, // °C (1.8 °F)
+};
+export const HISTORY_REFRESH_MS = 60 * 60 * 1000;
+
+/**
+ * Whether `next` is worth a state after `previous`, the last value published.
+ * Features without a threshold: any change is.
+ * @param {{ temperatureUnit?: string }} options unit of the handle temperature
+ */
+export function isSignificantChange(key, previous, next, { temperatureUnit } = {}) {
+  const rule = HISTORY_THRESHOLDS[key];
+  if (!rule || typeof previous !== 'number' || typeof next !== 'number') {
+    return JSON.stringify(previous) !== JSON.stringify(next);
+  }
+  // Back to 0 only: an idle reading wavering between 0 and a few watts must
+  // not publish at every read.
+  if (rule.zero && next === 0 && previous !== 0) return true;
+  const fahrenheit =
+    key === WALL_CONNECTOR_FEATURES.HANDLE_TEMPERATURE && temperatureUnit === UNITS.FAHRENHEIT;
+  const step = Math.max(
+    fahrenheit ? rule.step * 1.8 : rule.step,
+    Math.abs(previous) * (rule.relative ?? 0),
+  );
+  // The epsilon absorbs the float error of a rounded value (16.5 - 16 is 0.5).
+  return Math.abs(next - previous) >= step - 1e-9;
+}
 
 // Gladys `charging-station/charging-state` (OCPP ChargingStateEnumType).
 export const CHARGING_STATION_STATE = {
@@ -61,58 +102,110 @@ export const CONNECTOR_STATUS = { AVAILABLE: 0, OCCUPIED: 1, UNAVAILABLE: 3, FAU
 //     in, unplugging): "likely a non-Tesla car", from that single test.
 // No car plugged in (`vehicle_connected: false`) is always "Disconnected".
 export const EVSE_STATES = {
-  0: { key: 'booting', en: 'Booting', fr: 'Démarrage' },
+  0: { key: 'booting', en: 'Booting', fr: 'Démarrage', de: 'Startet', es: 'Arrancando' },
   1: {
     key: 'not_connected',
     en: 'Vehicle not connected',
     fr: 'Véhicule non branché',
+    de: 'Fahrzeug nicht angeschlossen',
+    es: 'Vehículo no enchufado',
     session: 'Disconnected',
   },
-  2: { key: 'connected', en: 'Vehicle connected', fr: 'Véhicule branché', session: 'Stopped' },
-  4: { key: 'ready', en: 'Ready to charge', fr: 'Prête à charger', session: 'Stopped' },
-  6: { key: 'negotiating', en: 'Negotiating', fr: 'Négociation', session: 'Stopped' },
+  2: {
+    key: 'connected',
+    en: 'Vehicle connected',
+    fr: 'Véhicule branché',
+    de: 'Fahrzeug angeschlossen',
+    es: 'Vehículo enchufado',
+    session: 'Stopped',
+  },
+  4: {
+    key: 'ready',
+    en: 'Ready to charge',
+    fr: 'Prête à charger',
+    de: 'Bereit zum Laden',
+    es: 'Listo para cargar',
+    session: 'Stopped',
+  },
+  6: {
+    key: 'negotiating',
+    en: 'Negotiating',
+    fr: 'Négociation',
+    de: 'Aushandlung',
+    es: 'Negociando',
+    session: 'Stopped',
+  },
   7: {
     key: 'outside_schedule',
     en: 'Plugged in, outside charging schedule',
     fr: 'Branchée, hors plage de charge',
+    de: 'Angeschlossen, außerhalb des Ladeplans',
+    es: 'Enchufado, fuera del horario de carga',
     session: 'Stopped',
   },
   8: {
     key: 'charging_finished',
     en: 'Charging finished',
     fr: 'Charge terminée',
+    de: 'Laden beendet',
+    es: 'Carga terminada',
     session: 'Complete',
   },
   9: {
     key: 'waiting_car',
     en: 'Waiting for the car',
     fr: 'En attente du véhicule',
+    de: 'Wartet auf das Fahrzeug',
+    es: 'Esperando al vehículo',
     session: 'Stopped',
   },
   10: {
     key: 'charging_other',
     en: 'Charging (likely non-Tesla)',
     fr: 'En charge (non Tesla probable)',
+    de: 'Lädt (wohl kein Tesla)',
+    es: 'Cargando (probablemente no Tesla)',
     session: 'Charging',
   },
-  11: { key: 'charging', en: 'Charging', fr: 'En charge', session: 'Charging' },
+  11: {
+    key: 'charging',
+    en: 'Charging',
+    fr: 'En charge',
+    de: 'Lädt',
+    es: 'Cargando',
+    session: 'Charging',
+  },
   12: {
     key: 'connected_other',
     en: 'Plugged in (likely non-Tesla)',
     fr: 'Branchée (non Tesla probable)',
+    de: 'Angeschlossen (wohl kein Tesla)',
+    es: 'Enchufado (probablemente no Tesla)',
     session: 'Stopped',
   },
   13: {
     key: 'ending_other',
     en: 'Session ending (likely non-Tesla)',
     fr: 'Fin de session (non Tesla probable)',
+    de: 'Sitzungsende (wohl kein Tesla)',
+    es: 'Fin de sesión (probablemente no Tesla)',
     session: 'Complete',
   },
-  21: { key: 'ending', en: 'Session ending', fr: 'Fin de session', session: 'Complete' },
+  21: {
+    key: 'ending',
+    en: 'Session ending',
+    fr: 'Fin de session',
+    de: 'Sitzungsende',
+    es: 'Fin de sesión',
+    session: 'Complete',
+  },
 };
-const FAULT_TEXT = { en: 'Error', fr: 'Erreur' };
-const UNREACHABLE_TEXT = { en: 'Unreachable', fr: 'Injoignable' };
-const UNKNOWN_STATE_TEXT = { en: 'State', fr: 'État' };
+// Other texts of the state, exported for test/i18n.test.js.
+export const STATE_TEXTS = {
+  fault: { en: 'Error', fr: 'Erreur', de: 'Fehler', es: 'Error' },
+  unreachable: { en: 'Unreachable', fr: 'Injoignable', de: 'Nicht erreichbar', es: 'Inaccesible' },
+  unknown: { en: 'State', fr: 'État', de: 'Zustand', es: 'Estado' },
+};
 
 // Display bounds: 22 kW is the three-phase maximum, 11.5 kW the North
 // American one (48 A × 240 V).
@@ -176,11 +269,13 @@ export function isCharging(vitals = {}) {
   return EVSE_STATES[vitals.evse_state]?.session === 'Charging';
 }
 
-/** The state of the vitals as text, `{ en, fr }` (null when unknown). */
+/** The state of the vitals as text, `{ en, fr, de, es }` (null when unknown). */
 export function stateText(vitals = {}) {
-  if (isFault(vitals)) return FAULT_TEXT;
+  if (isFault(vitals)) return STATE_TEXTS.fault;
   const state = EVSE_STATES[vitals.evse_state];
-  return state ? { en: state.en, fr: state.fr } : null;
+  return state
+    ? Object.fromEntries(LANGUAGES.map((language) => [language, state[language]]))
+    : null;
 }
 
 /** Temperature unit: the setting, or the grid (60 Hz: °F) when "auto". */
@@ -289,10 +384,10 @@ export function buildWallConnectorDevice(gladys, version, { language, temperatur
 
 /** The status text, in the configured language. */
 export function statusText(language, vitals, reachable = true) {
-  if (!reachable) return UNREACHABLE_TEXT[language] ?? UNREACHABLE_TEXT.en;
+  if (!reachable) return STATE_TEXTS.unreachable[language] ?? STATE_TEXTS.unreachable.en;
   const state = stateText(vitals ?? {});
   if (state) return state[language] ?? state.en;
-  const label = UNKNOWN_STATE_TEXT[language] ?? UNKNOWN_STATE_TEXT.en;
+  const label = STATE_TEXTS.unknown[language] ?? STATE_TEXTS.unknown.en;
   return Number.isFinite(vitals?.evse_state) ? `${label} ${vitals.evse_state}` : null;
 }
 
@@ -305,6 +400,12 @@ function connectorStatus(vitals, reachable) {
 }
 
 function chargingState(vitals) {
+  // No car plugged in: Gladys's enum has a value only during a session, but a
+  // published state cannot be cleared, and the last one ("Charging") would
+  // stay on screen. "Idle", as soon as the car leaves (a real test: 11 → 1).
+  if (vitals.vehicle_connected === false || vitals.evse_state === 1) {
+    return CHARGING_STATION_STATE.IDLE;
+  }
   switch (vitals.evse_state) {
     case 10:
     case 11:
@@ -319,12 +420,11 @@ function chargingState(vitals) {
       return isFault(vitals) ? null : CHARGING_STATION_STATE.PAUSED_BY_CHARGER;
     case 9:
       return CHARGING_STATION_STATE.PAUSED_BY_VEHICLE;
-    // Gladys's charge session enum expects "idle" only with a car plugged in
-    // (OCCUPIED): no car (state 1), nothing is published.
+    // The session ends, the car still plugged in (OCPP Finishing).
     case 8:
     case 13:
     case 21:
-      return vitals.vehicle_connected === false ? null : CHARGING_STATION_STATE.IDLE;
+      return CHARGING_STATION_STATE.IDLE;
     default:
       return null;
   }

@@ -50,7 +50,7 @@ appareil continue, avec son historique.
 | **Adresses des bornes**         | Adresse IP (ou nom d'hôte) de chaque borne, séparées par des virgules. La recherche la remplit aussi.                                                                                                                                  |
 | **Plage de recherche (avancé)** | À laisser vide en général : la recherche prend le réseau de Gladys. Sinon un réseau (`192.168.1.0/24`), une plage (`192.168.1.10-192.168.1.60`) ou des adresses, séparés par des virgules. Adresses privées uniquement, 1 024 au plus. |
 | **Unité de température**        | Unité de la température de la poignée telle que les scènes la comparent : automatique (°F sur une borne nord-américaine, °C sinon), °C ou °F. Le tableau de bord convertit toujours.                                                   |
-| **Langue des noms d'appareils** | Noms anglais ou français des fonctionnalités des nouveaux appareils. Gladys garde le nom d'une fonctionnalité une fois l'appareil créé.                                                                                                |
+| **Langue des noms d'appareils** | Noms anglais, français, allemands ou espagnols des fonctionnalités des nouveaux appareils. Gladys garde le nom d'une fonctionnalité une fois l'appareil créé.                                                                          |
 
 ## Recherche automatique
 
@@ -96,16 +96,16 @@ faut vérifier.
 
 ## Ce que vous obtenez
 
-| Fonctionnalité             | Détails                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------ |
-| Connecteur                 | Disponible, occupé (une voiture est branchée), indisponible, en défaut         |
-| État de charge             | En charge, véhicule connecté, en pause (voiture ou borne), inactif             |
-| Statut                     | L'état propre de la borne en toutes lettres (voir [États](#états-de-la-borne)) |
-| Puissance de charge        | W                                                                              |
-| Énergie de la session      | kWh délivrés depuis le branchement de la voiture                               |
-| Énergie totale délivrée    | Index cumulé en kWh, pour le suivi d'énergie de Gladys                         |
-| Tension du réseau, courant | V, A                                                                           |
-| Température de la poignée  | °C ou °F (réglage **Unité de température**)                                    |
+| Fonctionnalité             | Détails                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Connecteur                 | Disponible, occupé (une voiture est branchée), indisponible, en défaut                                       |
+| État de charge             | En charge, véhicule connecté, en pause (voiture ou borne), inactif (aussi dès que la voiture est débranchée) |
+| Statut                     | L'état propre de la borne en toutes lettres (voir [États](#états-de-la-borne))                               |
+| Puissance de charge        | W                                                                                                            |
+| Énergie de la session      | kWh délivrés depuis le branchement de la voiture                                                             |
+| Énergie totale délivrée    | Index cumulé en kWh, pour le suivi d'énergie de Gladys                                                       |
+| Tension du réseau, courant | V, A                                                                                                         |
+| Température de la poignée  | °C ou °F (réglage **Unité de température**)                                                                  |
 
 Tout est en lecture seule : l'API locale de la borne ne lance, n'arrête ni ne
 limite une charge (faites-le depuis la voiture ou l'application Tesla).
@@ -113,6 +113,25 @@ limite une charge (faites-le depuis la voiture ou l'application Tesla).
 La borne est lue toutes les **15 secondes** (le compteur total toutes les
 minutes), et seul ce qui change est envoyé à Gladys. Après trois lectures
 manquées de suite, la borne apparaît **injoignable** (pastille sur l'appareil).
+
+**Historique.** Gladys garde chaque valeur reçue. La tension du réseau, le
+courant, la température de la poignée et la puissance bougent un peu à chaque
+lecture : ils ne sont envoyés que s'ils changent nettement depuis la dernière
+valeur envoyée :
+
+| Mesure                    | Envoyée quand elle bouge de                                           |
+| ------------------------- | --------------------------------------------------------------------- |
+| Puissance de charge       | 50 W, ou 2 % pendant une charge (150 W à 7,4 kW) ; et au retour à 0 W |
+| Courant du véhicule       | 0,5 A ; et au retour à 0 A                                            |
+| Tension du réseau         | 2 V                                                                   |
+| Température de la poignée | 1 °C (1,8 °F)                                                         |
+
+Chacune est aussi renvoyée **une fois par heure**, même sans bouger, pour que
+Gladys ne la voie jamais comme périmée. Comptez quelques dizaines de valeurs
+par jour pour chacune, plus quelques-unes pendant une charge, au lieu d'une
+toutes les 15 secondes (5 760 par jour). Les tuiles puissance et courant du
+widget affichent ces valeurs ; ses lignes d'énergie sont lues directement sur la
+borne.
 
 La borne donne des tensions et des courants, pas la puissance : celle-ci est
 calculée phase par phase (triphasé en Europe), ou comme tension × courant sur
@@ -162,15 +181,20 @@ principal seul pour le total de la maison.
 Le widget **Borne Tesla Wall Connector** (Gladys 5.1+), réglé avec la borne à
 afficher :
 
-- en haut, ce qui bouge en direct : **puissance** et **courant** de charge ;
+- en haut, deux tuiles côte à côte : **puissance** et **courant** de charge ;
 - en dessous, l'énergie : **Cette session** quand une voiture est branchée,
   **Dernière session** sinon (la borne garde l'énergie de la session terminée),
-  et le **Total** délivré, arrondi pour tenir dans sa tuile (en MWh au-delà de
-  1 000 kWh ; la fonctionnalité garde la valeur exacte) ;
+  et le **Total** délivré, arrondi (en MWh au-delà de 1 000 kWh ; la
+  fonctionnalité garde la valeur exacte) ;
 - l'état de la borne et de la voiture, et, voiture branchée, **Branché depuis**
   (compté par la borne depuis le branchement) et **Durée de charge** (suivie
   par l'intégration : le temps où la borne a réellement délivré du courant
   pendant ce branchement, remis à zéro au débranchement).
+
+L'énergie s'affiche en lignes sous les tuiles, et non en deux tuiles de plus :
+Gladys 5.1.4 range toutes les tuiles d'un widget sur une seule rangée qui passe
+à la ligne après trois, sans réglage du nombre de colonnes, et quatre tuiles
+s'afficheraient en trois plus une.
 
 Pas de bouton : l'API locale ne fait que lire.
 

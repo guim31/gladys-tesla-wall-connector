@@ -11,6 +11,7 @@ import { normalizeConfig } from './src/config.js';
 import { createStore } from './src/store.js';
 import { createRuntime } from './src/runtime.js';
 import { createWidgets } from './src/widgets.js';
+import { MESSAGES } from './src/messages.js';
 
 const gladys = new GladysIntegration();
 const store = createStore({ logger });
@@ -55,12 +56,7 @@ gladys.on('connected', async () => {
     }
   } catch (err) {
     logger.error('Initialization failed', err);
-    await gladys
-      .setConnectionStatus(false, {
-        en: 'Initialization failed, check the integration logs.',
-        fr: "L'initialisation a échoué, consultez les logs de l'intégration.",
-      })
-      .catch(() => {});
+    await gladys.setConnectionStatus(false, MESSAGES.initFailed).catch(() => {});
   }
 });
 

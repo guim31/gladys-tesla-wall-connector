@@ -26,7 +26,7 @@ import {
 } from '../src/devices/wallConnector.js';
 import { createRuntime, WALL_CONNECTOR_POLL_MS } from '../src/runtime.js';
 import { normalizeConfig } from '../src/config.js';
-import { createWidgets, duration, totalEnergy } from '../src/widgets.js';
+import { createWidgets, duration, energyText, totalEnergy } from '../src/widgets.js';
 import { createFakeGladys } from './helpers/fakeGladys.js';
 import { createMemoryStore } from './helpers/memoryStore.js';
 import { SCENE_TRIGGERS, wallConnectorTransitions } from '../src/triggers.js';
@@ -161,15 +161,12 @@ test('the vitals become Gladys states', () => {
   );
   const byKey = Object.fromEntries(finished.map(({ key, value }) => [key, value]));
   assert.equal(byKey[F.CHARGING_STATE], 4, 'finished: idle');
-  // No car: Gladys expects "idle" only with a car plugged in, so nothing.
+  // No car: "idle", so the last session state does not stay on screen.
   const unplugged = wallConnectorStates(
     { vitals: wcFixture('vitals_eu_unplugged') },
     { language: 'en', temperatureUnit: 'celsius' },
   );
-  assert.equal(
-    unplugged.find((st) => st.key === F.CHARGING_STATE),
-    undefined,
-  );
+  assert.equal(unplugged.find((st) => st.key === F.CHARGING_STATE).value, 4, 'idle');
   assert.equal(unplugged.find((st) => st.key === F.CONNECTOR_STATUS).value, 0, 'available');
   assert.equal(byKey[F.POWER], 0);
   assert.equal(byKey[F.HANDLE_TEMPERATURE], 64.8);
@@ -233,7 +230,7 @@ function mapped(vitals) {
 test('a Tesla: plugged in outside its schedule (7) is not an error', () => {
   assert.deepEqual(sequences.tesla.map(vitalsOf).map(mapped), [
     // evse, connector (0 free, 1 occupied), charging state, status, session
-    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+    [1, 0, 4, 'Véhicule non branché', 'Disconnected'],
     [7, 1, 3, 'Branchée, hors plage de charge', 'Stopped'],
     [9, 1, 2, 'En attente du véhicule', 'Stopped'],
     [11, 1, 0, 'En charge', 'Charging'],
@@ -241,17 +238,17 @@ test('a Tesla: plugged in outside its schedule (7) is not an error', () => {
     [9, 1, 2, 'En attente du véhicule', 'Stopped'],
     [4, 1, 1, 'Prête à charger', 'Stopped'],
     [21, 1, 4, 'Fin de session', 'Complete'],
-    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+    [1, 0, 4, 'Véhicule non branché', 'Disconnected'],
   ]);
 });
 
 test('a non-Tesla car: 12, 10 and 13, said "likely non-Tesla"', () => {
   assert.deepEqual(sequences.other_make.map(vitalsOf).map(mapped), [
-    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+    [1, 0, 4, 'Véhicule non branché', 'Disconnected'],
     [12, 1, 1, 'Branchée (non Tesla probable)', 'Stopped'],
     [10, 1, 0, 'En charge (non Tesla probable)', 'Charging'],
     [13, 1, 4, 'Fin de session (non Tesla probable)', 'Complete'],
-    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+    [1, 0, 4, 'Véhicule non branché', 'Disconnected'],
   ]);
   for (const step of sequences.other_make) {
     assert.ok(statusText('en', vitalsOf(step)).length <= 40, 'a widget status value');
@@ -263,15 +260,16 @@ test('state 7 is an error only without a car or with an alert', () => {
   assert.equal(isFault(plugged), false);
   const faulted = (vitals) =>
     wallConnectorStates({ vitals }, { language: 'en', temperatureUnit: 'celsius' });
-  for (const vitals of [
-    { ...plugged, current_alerts: [42] },
-    { ...plugged, vehicle_connected: false, prox_v: 0 },
+  for (const [vitals, chargingState] of [
+    [{ ...plugged, current_alerts: [42] }, undefined],
+    // No car, no session: idle.
+    [{ ...plugged, vehicle_connected: false, prox_v: 0 }, 4],
   ]) {
     assert.equal(isFault(vitals), true);
     const byKey = Object.fromEntries(faulted(vitals).map(({ key, value }) => [key, value]));
     assert.equal(byKey[F.CONNECTOR_STATUS], 4, 'faulted');
     assert.deepEqual(byKey[F.STATUS], { text: 'Error' });
-    assert.equal(byKey[F.CHARGING_STATE], undefined);
+    assert.equal(byKey[F.CHARGING_STATE], chargingState);
     assert.equal(sessionState(vitals), null, 'no transition');
   }
   // A reason not to be ready (the schedule) is no error.
@@ -577,9 +575,11 @@ test('widget: valid, read-only, bound to existing features', async () => {
     }
   }
   const eu = await widgets.wall_connector.get({ settings: { device: EU } });
-  const rows = eu.components.find((c) => c.type === 'status').items;
-  assert.deepEqual(rows[0].value, { en: 'Charging', fr: 'En charge' });
-  assert.equal(rows[2].value, '1 h 02 min');
+  const rows = Object.fromEntries(
+    eu.components.find((c) => c.type === 'status').items.map((item) => [item.label.en, item.value]),
+  );
+  assert.deepEqual(rows.Status, { en: 'Charging', fr: 'En charge', de: 'Lädt', es: 'Cargando' });
+  assert.equal(rows['Plugged in for'], '1 h 02 min');
   const wrong = await widgets.wall_connector.get({ settings: { device: 'ext:other:device:X' } });
   assert.deepEqual(validateWidgetContent(wrong), []);
   assert.deepEqual(validateWidgetContent(await widgets.wall_connector.get({ settings: {} })), []);
@@ -644,9 +644,12 @@ test('the charging time counts from the contactor, not from plugging in', async 
   assert.equal((await rows())['Durée de charge'], '0 min', 'plugged in, not charging yet');
   net.set(WC_HOSTS.EU, { vitals: { ...charging, session_s: 2235 } });
   await poll();
-  assert.deepEqual(await rows(), {
-    Statut: { en: 'Charging', fr: 'En charge' },
-    Véhicule: { en: 'Plugged in', fr: 'Branché' },
+  const { 'Cette session': session, Total: total, ...others } = await rows();
+  assert.equal(session.fr, '0,31 kWh');
+  assert.equal(total.fr, '386 kWh');
+  assert.deepEqual(others, {
+    Statut: { en: 'Charging', fr: 'En charge', de: 'Lädt', es: 'Cargando' },
+    Véhicule: { en: 'Plugged in', fr: 'Branché', de: 'Angeschlossen', es: 'Enchufado' },
     'Branché depuis': '37 min',
     'Durée de charge': '0 min',
   });
@@ -661,7 +664,7 @@ test('the charging time counts from the contactor, not from plugging in', async 
   // Unplugged: reset, and the durations leave the widget.
   net.set(WC_HOSTS.EU, { vitals: vitalsOf(sequences.tesla[8]) });
   await poll();
-  assert.deepEqual(Object.keys(await rows()), ['Statut', 'Véhicule']);
+  assert.deepEqual(Object.keys(await rows()), ['Dernière session', 'Total', 'Statut', 'Véhicule']);
   net.set(WC_HOSTS.EU, { vitals: { ...charging, session_s: 30 } });
   await poll();
   await poll(60 * 1000);
@@ -670,36 +673,71 @@ test('the charging time counts from the contactor, not from plugging in', async 
   await runtime.stop();
 });
 
-test('widget: power and current first, then the session and the total', async () => {
+test('widget: two tiles on one line (power, current), then the session and the total', async () => {
+  // Gladys 5.1.4 puts every `value` component in one wrapping row of tiles
+  // (3 per line on a usual dashboard column, no column setting): two tiles
+  // only, the energies as the first rows of the status list under them.
   const { runtime, net, poll } = await setup();
   const widgets = createWidgets(runtime);
-  const tiles = async () =>
-    (await widgets.wall_connector.get({ settings: { device: EU } })).components.filter(
-      (c) => c.type === 'value',
-    );
+  const content = async () => widgets.wall_connector.get({ settings: { device: EU } });
+  const layout = (c) => c.components.map((component) => component.type);
+  const tiles = (c) =>
+    c.components.filter((component) => ['value', 'gauge'].includes(component.type));
+  const rows = (c) => c.components.find((component) => component.type === 'status').items;
+
+  let widget = await content();
+  assert.deepEqual(layout(widget), ['value', 'value', 'status']);
   assert.deepEqual(
-    (await tiles()).map((c) => c.label.fr),
-    ['Puissance', 'Courant', 'Dernière session', 'Total'],
+    tiles(widget).map((tile) => [tile.label.fr, tile.device_feature]),
+    [
+      ['Puissance', `${EU}:power`],
+      ['Courant', `${EU}:current`],
+    ],
   );
-  assert.deepEqual((await tiles()).at(-1), {
-    type: 'value',
-    label: { en: 'Total', fr: 'Total' },
-    icon: 'activity',
-    value: 386,
-    unit: 'kWh',
-  });
+  assert.deepEqual(
+    rows(widget)
+      .slice(0, 2)
+      .map((row) => [row.label.fr, row.value.fr]),
+    [
+      ['Dernière session', '0 kWh'],
+      ['Total', '386 kWh'],
+    ],
+  );
   net.set(WC_HOSTS.EU, { vitals: wcFixture('vitals_eu_charging') });
   await poll();
-  assert.equal((await tiles())[2].label.fr, 'Cette session');
+  widget = await content();
+  assert.deepEqual(
+    rows(widget)
+      .slice(0, 2)
+      .map((row) => [row.label.fr, row.value.fr, row.value.en, row.value.de]),
+    [
+      ['Cette session', '11,29 kWh', '11.29 kWh', '11,29 kWh'],
+      ['Total', '386 kWh', '386 kWh', '386 kWh'],
+    ],
+  );
+  // Within the budget of the core: 8 components, 6 tiles, 2 texts, 4 buttons.
+  assert.ok(widget.components.length <= 8);
+  assert.ok(tiles(widget).length <= 6);
+  assert.equal(widget.components.filter((c) => c.type === 'text').length, 0);
+  assert.equal(widget.components.filter((c) => c.type === 'button').length, 0);
+  assert.ok(rows(widget).length <= 10);
+  assert.deepEqual(validateWidgetContent(widget), []);
   await runtime.stop();
 });
 
-test('widget: the total fits a tile; durations in both languages', () => {
+test('widget: the total is short; durations in every language', () => {
   assert.deepEqual(totalEnergy(8596.731), { value: 8.6, unit: 'MWh' });
   assert.deepEqual(totalEnergy(12345.6), { value: 12.35, unit: 'MWh' });
   assert.deepEqual(totalEnergy(386.204), { value: 386, unit: 'kWh' });
   assert.deepEqual(totalEnergy(41.72), { value: 41.7, unit: 'kWh' });
   assert.deepEqual(totalEnergy(null), { value: '—' });
+  assert.deepEqual(energyText(totalEnergy(8596.731)), {
+    en: '8.6 MWh',
+    fr: '8,6 MWh',
+    de: '8,6 MWh',
+    es: '8,6 MWh',
+  });
+  assert.equal(energyText(totalEnergy(null)), '—');
   assert.equal(duration(2220), '37 min');
   assert.equal(duration(3725), '1 h 02 min');
   assert.equal(duration(0), '0 min');
