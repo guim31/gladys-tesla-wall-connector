@@ -4,6 +4,7 @@
 // -----------------------------------------------------------------------------
 
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { createLogger, validateWidgetContent } from '@gladysassistant/integration-sdk';
 import {
@@ -17,6 +18,7 @@ import {
   WALL_CONNECTOR_FEATURES as F,
   buildWallConnectorDevice,
   chargingPowerW,
+  isFault,
   isSplitPhase,
   sessionState,
   statusText,
@@ -24,7 +26,7 @@ import {
 } from '../src/devices/wallConnector.js';
 import { createRuntime, WALL_CONNECTOR_POLL_MS } from '../src/runtime.js';
 import { normalizeConfig } from '../src/config.js';
-import { createWidgets } from '../src/widgets.js';
+import { createWidgets, duration, totalEnergy } from '../src/widgets.js';
 import { createFakeGladys } from './helpers/fakeGladys.js';
 import { createMemoryStore } from './helpers/memoryStore.js';
 import { SCENE_TRIGGERS, wallConnectorTransitions } from '../src/triggers.js';
@@ -188,7 +190,8 @@ test('charge sessions speak the cars’ vocabulary; unknown states make no trans
   assert.equal(sessionState(wcFixture('vitals_eu_charging')), 'Charging');
   assert.equal(sessionState(wcFixture('vitals_eu_finished')), 'Complete');
   assert.equal(sessionState({ evse_state: 9, vehicle_connected: true }), 'Stopped');
-  assert.equal(sessionState({ evse_state: 7, vehicle_connected: true }), null, 'error');
+  assert.equal(sessionState({ evse_state: 7, vehicle_connected: true }), 'Stopped', 'schedule');
+  assert.equal(sessionState({ evse_state: 7, vehicle_connected: false }), null, 'error');
   assert.equal(sessionState({ evse_state: 0 }), null, 'booting');
   assert.equal(statusText('fr', { evse_state: 42 }), 'État 42');
   const T = SCENE_TRIGGERS;
@@ -197,12 +200,82 @@ test('charge sessions speak the cars’ vocabulary; unknown states make no trans
     T.WALL_CONNECTOR_PLUGGED,
     T.WALL_CONNECTOR_CHARGING_STARTED,
   ]);
-  assert.deepEqual(between('Stopped', 'Complete'), [T.WALL_CONNECTOR_CHARGING_FINISHED]);
+  assert.deepEqual(between('Charging', 'Complete'), [T.WALL_CONNECTOR_CHARGING_FINISHED]);
+  assert.deepEqual(between('Charging', 'Stopped'), [T.WALL_CONNECTOR_CHARGING_FINISHED]);
+  assert.deepEqual(between('Stopped', 'Complete'), [], 'no charge to finish');
+  assert.deepEqual(between('Charging', 'Disconnected'), [T.WALL_CONNECTOR_UNPLUGGED]);
   assert.deepEqual(between('Disconnected', 'Complete'), [T.WALL_CONNECTOR_PLUGGED]);
   assert.deepEqual(between('Complete', 'Disconnected'), [T.WALL_CONNECTOR_UNPLUGGED]);
   assert.deepEqual(between(undefined, 'Charging'), [], 'first value');
   assert.deepEqual(between('Charging', 'Charging'), []);
   assert.equal(statusText('en', {}), null, 'never an empty text');
+});
+
+// --- States of a real charger (single phase, a Tesla and a non-Tesla car) -------
+
+const sequences = JSON.parse(
+  readFileSync(new URL('./fixtures/single-phase/sequences.json', import.meta.url), 'utf8'),
+);
+const vitalsOf = (step) => ({ ...sequences.base, ...step.vitals });
+
+function mapped(vitals) {
+  const states = wallConnectorStates({ vitals }, { language: 'fr', temperatureUnit: 'celsius' });
+  const byKey = Object.fromEntries(states.map(({ key, value }) => [key, value]));
+  return [
+    vitals.evse_state,
+    byKey[F.CONNECTOR_STATUS],
+    byKey[F.CHARGING_STATE] ?? null,
+    byKey[F.STATUS].text,
+    sessionState(vitals),
+  ];
+}
+
+test('a Tesla: plugged in outside its schedule (7) is not an error', () => {
+  assert.deepEqual(sequences.tesla.map(vitalsOf).map(mapped), [
+    // evse, connector (0 free, 1 occupied), charging state, status, session
+    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+    [7, 1, 3, 'Branchée, hors plage de charge', 'Stopped'],
+    [9, 1, 2, 'En attente du véhicule', 'Stopped'],
+    [11, 1, 0, 'En charge', 'Charging'],
+    [11, 1, 0, 'En charge', 'Charging'],
+    [9, 1, 2, 'En attente du véhicule', 'Stopped'],
+    [4, 1, 1, 'Prête à charger', 'Stopped'],
+    [21, 1, 4, 'Fin de session', 'Complete'],
+    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+  ]);
+});
+
+test('a non-Tesla car: 12, 10 and 13, said "likely non-Tesla"', () => {
+  assert.deepEqual(sequences.other_make.map(vitalsOf).map(mapped), [
+    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+    [12, 1, 1, 'Branchée (non Tesla probable)', 'Stopped'],
+    [10, 1, 0, 'En charge (non Tesla probable)', 'Charging'],
+    [13, 1, 4, 'Fin de session (non Tesla probable)', 'Complete'],
+    [1, 0, null, 'Véhicule non branché', 'Disconnected'],
+  ]);
+  for (const step of sequences.other_make) {
+    assert.ok(statusText('en', vitalsOf(step)).length <= 40, 'a widget status value');
+  }
+});
+
+test('state 7 is an error only without a car or with an alert', () => {
+  const plugged = vitalsOf(sequences.tesla[1]);
+  assert.equal(isFault(plugged), false);
+  const faulted = (vitals) =>
+    wallConnectorStates({ vitals }, { language: 'en', temperatureUnit: 'celsius' });
+  for (const vitals of [
+    { ...plugged, current_alerts: [42] },
+    { ...plugged, vehicle_connected: false, prox_v: 0 },
+  ]) {
+    assert.equal(isFault(vitals), true);
+    const byKey = Object.fromEntries(faulted(vitals).map(({ key, value }) => [key, value]));
+    assert.equal(byKey[F.CONNECTOR_STATUS], 4, 'faulted');
+    assert.deepEqual(byKey[F.STATUS], { text: 'Error' });
+    assert.equal(byKey[F.CHARGING_STATE], undefined);
+    assert.equal(sessionState(vitals), null, 'no transition');
+  }
+  // A reason not to be ready (the schedule) is no error.
+  assert.equal(isFault({ ...plugged, evse_not_ready_reasons: [1] }), false);
 });
 
 // --- Runtime --------------------------------------------------------------------
@@ -511,4 +584,124 @@ test('widget: valid, read-only, bound to existing features', async () => {
   assert.deepEqual(validateWidgetContent(wrong), []);
   assert.deepEqual(validateWidgetContent(await widgets.wall_connector.get({ settings: {} })), []);
   await runtime.stop();
+});
+
+async function playSequence(steps, { config } = {}) {
+  const ctx = await setup({ config: config ?? { wall_connectors: WC_HOSTS.EU } });
+  const events = [];
+  for (const step of steps) {
+    ctx.net.set(WC_HOSTS.EU, { vitals: vitalsOf(step) });
+    const before = ctx.gladys.sceneEvents.length;
+    await ctx.poll(5 * 60 * 1000);
+    events.push(ctx.gladys.sceneEvents.slice(before).map((e) => e.key));
+  }
+  return { ...ctx, events };
+}
+
+test('the scene triggers of a Tesla session on a real charger', async () => {
+  const { runtime, events } = await playSequence(sequences.tesla);
+  assert.deepEqual(events, [
+    [], // already unplugged
+    ['wall_connector_plugged'], // 7: outside the schedule, still plugged in
+    [],
+    ['wall_connector_charging_started'],
+    [],
+    ['wall_connector_charging_finished'], // 11 → 9
+    [],
+    [],
+    ['wall_connector_unplugged'],
+  ]);
+  await runtime.stop();
+});
+
+test('the scene triggers of a non-Tesla car on a real charger', async () => {
+  const { runtime, events, gladys } = await playSequence(sequences.other_make);
+  assert.deepEqual(events, [
+    [],
+    ['wall_connector_plugged'],
+    ['wall_connector_charging_started'],
+    ['wall_connector_charging_finished'], // 13: the charge ends as the car leaves
+    ['wall_connector_unplugged'],
+  ]);
+  assert.equal(gladys.sceneEvents.at(-1).data.session_energy, 1.29);
+  await runtime.stop();
+});
+
+test('the charging time counts from the contactor, not from plugging in', async () => {
+  const { gladys, runtime, net, poll } = await setup({ config: { wall_connectors: WC_HOSTS.EU } });
+  const widgets = createWidgets(runtime);
+  const rows = async () =>
+    Object.fromEntries(
+      (await widgets.wall_connector.get({ settings: { device: EU } })).components
+        .find((c) => c.type === 'status')
+        .items.map((item) => [item.label.fr, item.value]),
+    );
+  const [, outside, waiting, charging] = sequences.tesla.map(vitalsOf);
+  net.set(WC_HOSTS.EU, { vitals: outside });
+  await poll();
+  net.set(WC_HOSTS.EU, { vitals: { ...waiting, session_s: 2220 } });
+  await poll(30 * 60 * 1000);
+  assert.equal((await rows())['Durée de charge'], '0 min', 'plugged in, not charging yet');
+  net.set(WC_HOSTS.EU, { vitals: { ...charging, session_s: 2235 } });
+  await poll();
+  assert.deepEqual(await rows(), {
+    Statut: { en: 'Charging', fr: 'En charge' },
+    Véhicule: { en: 'Plugged in', fr: 'Branché' },
+    'Branché depuis': '37 min',
+    'Durée de charge': '0 min',
+  });
+  await poll(4 * 60 * 1000);
+  net.set(WC_HOSTS.EU, { vitals: { ...waiting, session_s: 2600 } });
+  await poll(60 * 1000);
+  assert.equal((await rows())['Durée de charge'], '5 min');
+  net.set(WC_HOSTS.EU, { vitals: { ...charging, session_s: 2900 } });
+  await poll(5 * 60 * 1000);
+  await poll(2 * 60 * 1000);
+  assert.equal((await rows())['Durée de charge'], '7 min', 'the two charges of the session');
+  // Unplugged: reset, and the durations leave the widget.
+  net.set(WC_HOSTS.EU, { vitals: vitalsOf(sequences.tesla[8]) });
+  await poll();
+  assert.deepEqual(Object.keys(await rows()), ['Statut', 'Véhicule']);
+  net.set(WC_HOSTS.EU, { vitals: { ...charging, session_s: 30 } });
+  await poll();
+  await poll(60 * 1000);
+  assert.equal((await rows())['Durée de charge'], '1 min');
+  assert.ok(gladys.widgetRefreshes.length > 0);
+  await runtime.stop();
+});
+
+test('widget: power and current first, then the session and the total', async () => {
+  const { runtime, net, poll } = await setup();
+  const widgets = createWidgets(runtime);
+  const tiles = async () =>
+    (await widgets.wall_connector.get({ settings: { device: EU } })).components.filter(
+      (c) => c.type === 'value',
+    );
+  assert.deepEqual(
+    (await tiles()).map((c) => c.label.fr),
+    ['Puissance', 'Courant', 'Dernière session', 'Total'],
+  );
+  assert.deepEqual((await tiles()).at(-1), {
+    type: 'value',
+    label: { en: 'Total', fr: 'Total' },
+    icon: 'activity',
+    value: 386,
+    unit: 'kWh',
+  });
+  net.set(WC_HOSTS.EU, { vitals: wcFixture('vitals_eu_charging') });
+  await poll();
+  assert.equal((await tiles())[2].label.fr, 'Cette session');
+  await runtime.stop();
+});
+
+test('widget: the total fits a tile; durations in both languages', () => {
+  assert.deepEqual(totalEnergy(8596.731), { value: 8.6, unit: 'MWh' });
+  assert.deepEqual(totalEnergy(12345.6), { value: 12.35, unit: 'MWh' });
+  assert.deepEqual(totalEnergy(386.204), { value: 386, unit: 'kWh' });
+  assert.deepEqual(totalEnergy(41.72), { value: 41.7, unit: 'kWh' });
+  assert.deepEqual(totalEnergy(null), { value: '—' });
+  assert.equal(duration(2220), '37 min');
+  assert.equal(duration(3725), '1 h 02 min');
+  assert.equal(duration(0), '0 min');
+  assert.equal(duration(undefined), '—');
 });

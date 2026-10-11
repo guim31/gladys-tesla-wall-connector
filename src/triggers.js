@@ -30,7 +30,10 @@ export function wallConnectorTransitions(previous, next) {
   if (!before || !after || before === after) return events;
   if (before === 'Disconnected') events.push(SCENE_TRIGGERS.WALL_CONNECTOR_PLUGGED);
   if (after === 'Charging') events.push(SCENE_TRIGGERS.WALL_CONNECTOR_CHARGING_STARTED);
-  if (after === 'Complete' && before !== 'Disconnected') {
+  // A charge ends with the car still plugged in: "complete" (8, and the
+  // session endings 13 and 21), or back to waiting (9, 4) or outside the
+  // schedule (7), as the Tesla of a real test did.
+  if (before === 'Charging' && (after === 'Complete' || after === 'Stopped')) {
     events.push(SCENE_TRIGGERS.WALL_CONNECTOR_CHARGING_FINISHED);
   }
   if (after === 'Disconnected') events.push(SCENE_TRIGGERS.WALL_CONNECTOR_UNPLUGGED);

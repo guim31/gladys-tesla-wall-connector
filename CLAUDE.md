@@ -143,6 +143,9 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
 - Les champs `number` sont rendus **sans `step`** : le navigateur n'accepte alors que `min + k`.
   Min et défaut **entiers** seulement ; une valeur décimale passe par un `select` ou par un
   `string` parsé (virgule acceptée).
+- Le résultat d'une **action** n'a que deux niveaux (5.1.4) : résolu = vert, levé = rouge, pas de
+  jaune. Une erreur levée dont le `message` est un objet `{ en, fr }` arrive telle quelle au
+  navigateur, qui choisit la langue (`ActionFailure` de `src/runtime.js`).
 - Un champ `secret` dans les `fields` d'une **action** est impossible à remplir, et une action
   n'applique **aucun `default`** tout en exigeant les champs `required` (422). Issues
   GladysAssistant/Gladys#3154 et #3155.
@@ -184,6 +187,12 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
   véhicule sur le biphasé nord-américain (réseau à 60 Hz ; Home Assistant le demande à
   l'utilisateur).
 - Identifier la borne par son numéro de série (`/version`), jamais par son IP (DHCP).
+- **États réels** (test de mutmut, monophasé, 10/10/2026, séquences dans
+  `test/fixtures/single-phase/`) : 7 = Tesla branchée hors planning de charge (pas une erreur),
+  9 aussi après l'arrêt d'une charge, 21 = débranchement Tesla, 12/10/13 = branchement, charge,
+  fin d'un véhicule non Tesla (un seul test : « non Tesla probable »). L'état 8 n'a pas été vu :
+  « charge terminée » part aussi de Charging → 9/4/7. `session_s` compte depuis le
+  **branchement**, pas depuis le début de la charge.
 - Ce code vient de `guim31/gladys-tesla` 1.1.0. Les clés de fonctionnalités, de déclencheurs et
   de widget sont restées les mêmes, mais **le cœur préfixe tout `external_id` par
   `ext:<sélecteur de l'intégration>:`** (`ext-<owner>-<repo>`) : une borne passée d'une
@@ -191,13 +200,18 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
 
 ## Découverte des bornes
 
-- La borne ne s'annonce ni en mDNS ni en SSDP : `network_discovery` (le cœur capte pour le
-  conteneur) ne sert à rien ici, et le cœur refuse tout balayage unicast par procuration.
-- Le conteneur est sur le pont `gladys-integrations` (172.30.0.0/24) : il ne voit pas le
-  réseau local de Gladys, et aucune API hôte ne le donne. L'unicast vers le LAN passe (NAT) :
+- La borne ne s'annonce ni en mDNS ni en SSDP, et le cœur refuse tout balayage unicast par
+  procuration.
+- Le conteneur est sur le pont `gladys-integrations` (172.30.0.0/24), jamais en `host`
+  (`buildContainerDescriptor`, 5.1.4) : il ne voit pas le réseau local de Gladys, et aucune API
+  hôte ni variable d'environnement ne donne son adresse. L'unicast vers le LAN passe (NAT) :
   la recherche balaie donc elle-même une plage (connexion TCP au port 80, puis
   `/api/1/version` + `/api/1/vitals` sur les ports ouverts), adresses privées seulement,
   1 024 au plus.
+- Le réseau de Gladys se déduit d'une recherche SSDP (`upnp:rootdevice`) que le cœur lance
+  depuis le réseau hôte (`network_discovery`, affiché à l'installation) : les /24 des appareils
+  qui répondent (box, télévision…), hors réseaux Docker. Repli sur 192.168.1.0/24 et
+  192.168.0.0/24 si personne ne répond.
 - La plage vient de la configuration ; le bloc `section` qui la précède affiche
   `{{gladys_host}}` (substitué par le front 5.1.4 dans les textes de `section` seulement : ni
   dans un `placeholder`, ni dans une `description` de champ).

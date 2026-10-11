@@ -11,7 +11,6 @@ import { readFileSync } from 'node:fs';
 import { SCENE_TRIGGER_KEYS } from '../src/triggers.js';
 import { createWidgets } from '../src/widgets.js';
 import { DEFAULT_CONFIG } from '../src/config.js';
-import { DEFAULT_SCAN_RANGES } from '../src/wallConnector/scan.js';
 
 // The handlers are built around the runtime; their keys do not depend on it.
 const WIDGETS = createWidgets({});
@@ -260,12 +259,14 @@ test('widgets have no button: the local API takes no command', () => {
 
 test('the search help shows the address the browser reaches Gladys by', () => {
   // {{gladys_host}} is substituted by the front (Gladys 5.1.4) in section texts
-  // only: the container cannot know the LAN address of Gladys.
+  // only: the container cannot know the LAN address of Gladys, it learns its
+  // network from the SSDP search the core makes for it.
   const help = manifest.config_schema.find((f) => f.key === 'search_help');
   assert.equal(help.type, 'section');
   for (const text of Object.values(help.description)) {
     assert.match(text, /\{\{gladys_host\}\}/);
-    for (const range of DEFAULT_SCAN_RANGES) assert.ok(text.includes(range), range);
+    assert.match(text, /SSDP/);
+    assert.ok(text.length <= 1000, 'section text bound of the core');
   }
   const order = keysOf(manifest.config_schema);
   assert.equal(order.indexOf('search_help') + 1, order.indexOf('scan_range'));
@@ -310,4 +311,10 @@ test('every configuration field is optional', () => {
   for (const field of manifest.config_schema.filter((f) => f.type !== 'section')) {
     assert.equal(field.required, false, field.key);
   }
+});
+
+test('the only network capture asked of Gladys: an SSDP search for root devices', () => {
+  // An authorization contract shown on the install screen: the answers give
+  // the network of Gladys (src/wallConnector/scan.js), nothing else.
+  assert.deepEqual(manifest.network_discovery, [{ type: 'ssdp', st: 'upnp:rootdevice' }]);
 });

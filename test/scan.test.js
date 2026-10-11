@@ -15,11 +15,12 @@ import {
   isPrivateIp,
   looksLikeWallConnector,
   parseScanRange,
+  lanRangesFromSsdp,
   scanForWallConnectors,
   subnet24,
   tcpProbe,
 } from '../src/wallConnector/scan.js';
-import { createRuntime } from '../src/runtime.js';
+import { ActionFailure, createRuntime } from '../src/runtime.js';
 import { normalizeConfig } from '../src/config.js';
 import { createFakeGladys } from './helpers/fakeGladys.js';
 import { createMemoryStore } from './helpers/memoryStore.js';
@@ -190,8 +191,14 @@ test('the TCP probe: open port, closed port', async () => {
 
 // --- The action -----------------------------------------------------------------
 
-async function setup({ config = {}, network = lan(), store = createMemoryStore() } = {}) {
+async function setup({
+  config = {},
+  network = lan(),
+  store = createMemoryStore(),
+  ssdpAnswers = [],
+} = {}) {
   const gladys = createFakeGladys();
+  gladys.ssdpAnswers = ssdpAnswers;
   const scans = [];
   const runtime = createRuntime({
     gladys,
@@ -271,34 +278,105 @@ test('nothing new found: the configuration is left alone', async () => {
   await runtime.stop();
 });
 
-test('no range and no charger: the two most common home networks, said so', async () => {
-  const { runtime, scans } = await setup();
-  const message = await runtime.searchWallConnectors();
-  assert.equal(scans[0].length, 508);
-  assert.equal(scans[0][0], '192.168.1.1');
-  assert.match(message.en, /No range in the configuration/);
-  assert.match(message.fr, /réseaux domestiques les plus courants/);
+// Answers to the core's SSDP search: an internet box, a TV and a speaker on
+// the home network, and a container on Docker's own networks.
+const SSDP_HOME = [
+  { source_ip: '10.20.30.1', source_port: 1900, headers: 'HTTP/1.1 200 OK' },
+  { source_ip: '10.20.30.57', source_port: 1900, headers: 'HTTP/1.1 200 OK' },
+  { source_ip: '10.20.30.57', source_port: 1900, headers: 'HTTP/1.1 200 OK' },
+  { source_ip: '10.20.30.80', source_port: 1900, headers: 'HTTP/1.1 200 OK' },
+  { source_ip: '172.30.0.5', source_port: 1900, headers: 'HTTP/1.1 200 OK' },
+  { source_ip: '172.17.0.2', source_port: 1900, headers: 'HTTP/1.1 200 OK' },
+  { source_ip: '203.0.113.9', source_port: 1900, headers: 'HTTP/1.1 200 OK' },
+];
+
+test('the networks of Gladys, from the devices answering its SSDP search', () => {
+  assert.deepEqual(lanRangesFromSsdp(SSDP_HOME), ['10.20.30.0/24']);
+  assert.deepEqual(
+    lanRangesFromSsdp([
+      { source_ip: '192.168.2.4' },
+      { source_ip: '192.168.10.4' },
+      { source_ip: '192.168.10.5' },
+    ]),
+    ['192.168.10.0/24', '192.168.2.0/24'],
+    'the most populated first',
+  );
+  const many = Array.from({ length: 6 }, (_, i) => ({ source_ip: `10.0.${i}.1` }));
+  assert.equal(lanRangesFromSsdp(many).length, 4, '1,024 addresses at most');
+  assert.deepEqual(lanRangesFromSsdp(null), []);
+  assert.deepEqual(lanRangesFromSsdp([{ source_ip: 'fe80::1' }, {}]), []);
+});
+
+test('no range: the search sweeps the network of Gladys, and says so', async () => {
+  const { gladys, runtime, scans } = await setup({ ssdpAnswers: SSDP_HOME });
+  await assert.rejects(runtime.searchWallConnectors(), (err) => {
+    assert.match(err.message.en, /254 addresses searched \(10\.20\.30\.0\/24\)/);
+    assert.match(err.message.fr, /Réseau de Gladys : 10\.20\.30\.0\/24\./);
+    return true;
+  });
+  assert.deepEqual(gladys.networkScans, [{ type: 'ssdp', timeoutSeconds: 3 }]);
+  assert.equal(scans[0].length, 254);
+  assert.equal(scans[0][0], '10.20.30.1');
   await runtime.stop();
 });
 
-test('nothing found: the message says what to check', async () => {
-  const { gladys, runtime } = await setup({ config: { scan_range: '10.0.0.1-10.0.0.20' } });
+test('no range: the network of the chargers comes first, then the one of Gladys', async () => {
+  const { runtime, scans } = await setup({
+    config: { wall_connectors: '192.168.1.42' },
+    ssdpAnswers: SSDP_HOME,
+  });
   const message = await runtime.searchWallConnectors();
-  assert.match(message.en, /No Wall Connector answered/);
-  assert.match(message.fr, /Tesla One/);
+  assert.equal(scans[0].length, 508);
+  assert.match(message.en, /\(192\.168\.1\.0\/24, 10\.20\.30\.0\/24\)/);
+  assert.match(message.en, /Network of Gladys: 10\.20\.30\.0\/24\./);
+  await runtime.stop();
+});
+
+test('no range and no answer to the SSDP search: the two most common home networks, said so', async () => {
+  for (const ssdpAnswers of [[], new Error('403 network_discovery not declared')]) {
+    const { runtime, scans } = await setup({ ssdpAnswers });
+    const message = await runtime.searchWallConnectors();
+    assert.equal(scans[0].length, 508);
+    assert.equal(scans[0][0], '192.168.1.1');
+    assert.match(message.en, /network of Gladys could not be found/);
+    assert.match(message.fr, /réseaux domestiques les plus courants/);
+    await runtime.stop();
+  }
+});
+
+test('nothing found: an error (shown in red), saying what to check', async () => {
+  const { gladys, runtime } = await setup({ config: { scan_range: '10.0.0.1-10.0.0.20' } });
+  await assert.rejects(runtime.searchWallConnectors(), (err) => {
+    assert.ok(err instanceof ActionFailure);
+    assert.match(err.message.en, /No Wall Connector answered/);
+    assert.match(err.message.fr, /Tesla One/);
+    return true;
+  });
   assert.deepEqual(gladys.configWrites, []);
+  assert.deepEqual(gladys.networkScans, [], 'a configured range: no SSDP search');
   await runtime.stop();
 });
 
 test('an unusable range is refused before any search, with an example', async () => {
   for (const scan_range of ['8.8.8.0/24', '10.0.0.0/16', 'my network']) {
     const { runtime, scans } = await setup({ config: { scan_range } });
-    const message = await runtime.searchWallConnectors();
+    await assert.rejects(runtime.searchWallConnectors(), (err) => {
+      assert.match(err.message.en, /192\.168\.1\.0\/24/);
+      assert.match(err.message.fr, /inutilisable/);
+      return true;
+    });
     assert.equal(scans.length, 0, scan_range);
-    assert.match(message.en, /192\.168\.1\.0\/24/);
-    assert.match(message.fr, /inutilisable/);
     await runtime.stop();
   }
+});
+
+test('a failed action reaches Gladys as its multi-language message', () => {
+  // The SDK acks `error: err.message`; the core relays it to the browser,
+  // which picks the language of a { en, fr } object.
+  const err = new ActionFailure({ en: 'Nothing', fr: 'Rien' });
+  assert.deepEqual(JSON.parse(JSON.stringify({ error: err.message })), {
+    error: { en: 'Nothing', fr: 'Rien' },
+  });
 });
 
 test('the configuration cannot be saved: the addresses are given to type', async () => {
@@ -331,6 +409,6 @@ test('one search at a time', async () => {
   const second = await runtime.searchWallConnectors();
   assert.match(second.en, /already running/);
   release();
-  assert.match((await first).en, /No Wall Connector answered/);
+  await assert.rejects(first, (err) => /No Wall Connector answered/.test(err.message.en));
   await runtime.stop();
 });

@@ -13,8 +13,11 @@
 //      `/api/1/vitals` with the charger's own (long) delay, kept only when
 //      both have the shape of a Wall Connector answer.
 // The range is the user's (configuration), else the /24 of the chargers
-// already configured, else the two most common home networks. Only private
-// addresses (RFC 1918), 1,024 at most: the sweep never leaves the home.
+// already configured and the /24 of Gladys itself, else the two most common
+// home networks. Gladys's network is learnt from an SSDP search the core runs
+// for the integration (it sits on the host network): the devices answering it
+// (the internet box, a TV, a speaker...) are on the LAN of Gladys. Only
+// private addresses (RFC 1918), 1,024 at most: the sweep never leaves the home.
 // -----------------------------------------------------------------------------
 
 import net from 'node:net';
@@ -24,6 +27,11 @@ export const MAX_SCAN_ADDRESSES = 1024;
 // Most French boxes (Livebox, Freebox, SFR, Bbox) hand out 192.168.1.x;
 // 192.168.0.x is the other common default.
 export const DEFAULT_SCAN_RANGES = ['192.168.1.0/24', '192.168.0.0/24'];
+// Four /24 networks: the 1,024 addresses of a search.
+export const MAX_SCAN_RANGES = MAX_SCAN_ADDRESSES / 256;
+// Docker's own networks, seen from the core when a container answers: the
+// integrations bridge (172.30.0.0/24) and the default bridge (172.17.0.0/16).
+const DOCKER_NETWORKS = [/^172\.30\.0\./, /^172\.17\./];
 
 const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
 
@@ -121,6 +129,28 @@ export function subnet24(host) {
   const ip = String(host).replace(/:\d+$/, '');
   if (!isPrivateIp(ip)) return null;
   return `${ip.replace(/\.\d+$/, '')}.0/24`;
+}
+
+/**
+ * The home networks seen in the answers to an SSDP search
+ * (`[{ source_ip }]`), as /24 ranges, the most populated first.
+ */
+export function lanRangesFromSsdp(answers) {
+  const devices = new Map(); // range → distinct addresses
+  for (const answer of Array.isArray(answers) ? answers : []) {
+    const ip = typeof answer?.source_ip === 'string' ? answer.source_ip : '';
+    if (DOCKER_NETWORKS.some((docker) => docker.test(ip))) continue;
+    const range = subnet24(ip);
+    if (!range) continue;
+    if (!devices.has(range)) devices.set(range, new Set());
+    devices.get(range).add(ip);
+  }
+  return [...devices.entries()]
+    .sort(
+      ([a, x], [b, y]) => y.size - x.size || ipToInt(a.split('/')[0]) - ipToInt(b.split('/')[0]),
+    )
+    .map(([range]) => range)
+    .slice(0, MAX_SCAN_RANGES);
 }
 
 /** Is a TCP port open? Resolves false on any error or after `timeoutMs`. */
