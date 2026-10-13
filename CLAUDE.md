@@ -99,6 +99,12 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
 - **Publier n'est jamais le travail d'une session de code** : ni Release, ni tag, ni topic, ni
   version modifiée à la main. L'orchestrateur s'en charge une fois la PR fusionnée. Les workflows
   sont ceux du template : ne pas les modifier.
+- **Logs** : le niveau info ne garde que le cycle de vie (démarrage, borne trouvée, borne qui ne
+  répond plus puis à nouveau, une ligne par action de l'utilisateur) ; chaque lecture, état publié
+  ou déclencheur passe en debug (`LOG_LEVEL=debug`, lu par le logger du SDK). Une panne donne
+  une ligne au passage en injoignable (ou au premier échec pour une adresse jamais vue) et une au
+  rétablissement, pas une par tentative ; les
+  tests « logs: … » de `test/wallConnector.test.js` le vérifient.
 - Le dépôt est **public** : aucun secret, aucune adresse ni détail d'infrastructure privée, ni
   ici, ni dans les tests, ni dans les captures.
 
@@ -111,6 +117,11 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
   15000, 30000, 60000). Le template publie `poll_frequency: 300` sans `should_poll` : c'est faux,
   le cœur répond 400 à la découverte. Pour une cadence hors liste, publier `should_poll: false` et
   pousser les états depuis le conteneur, en gardant un `onPoll` de repli.
+  Le cœur 5.2.0 ne sonde jamais un appareil **déjà créé** sans `should_poll`, même une fois
+  GladysAssistant/Gladys#3198 corrigé (#3199) : ne jamais compter sur `onPoll`. Ici, la borne est
+  lue par le minuteur de `src/runtime.js` (15 s) ; l'`onPoll` de repli republie le cache sans
+  interroger la borne. Le test « the states reach Gladys from the internal timer, without any
+  onPoll » le fige.
 - **`min` et `max` sont NOT NULL** dans `t_device_feature`, y compris pour `text/text` : sans eux,
   « Ajouter à Gladys » échoue en HTTP 422. Mettre 0/0, comme Zigbee2MQTT.
 - Un état publié sur une fonctionnalité **pas encore ajoutée** dans Gladys reçoit un 200 puis est

@@ -259,5 +259,6 @@ n'utilisiez l'intégration Tesla que pour la borne, vous pouvez la désinstaller
 - **La borne répond lentement** : c'est fréquent avec ce firmware ;
   l'intégration attend jusqu'à 10 secondes et ne la déclare injoignable
   qu'après trois échecs de suite.
-- L'intégration journalise ce qu'elle fait (recherches, réponses de la
-  borne) : ouvrez ses logs depuis l'onglet de l'intégration dans Gladys.
+- L'intégration journalise l'essentiel (démarrage, recherches, borne qui ne
+  répond plus puis qui répond à nouveau), pas chaque lecture : ouvrez ses logs
+  depuis l'onglet de l'intégration dans Gladys.

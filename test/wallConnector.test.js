@@ -279,14 +279,14 @@ test('state 7 is an error only without a car or with an alert', () => {
 
 // --- Runtime --------------------------------------------------------------------
 
-async function setup({ config = {}, store = createMemoryStore(), network } = {}) {
+async function setup({ config = {}, store = createMemoryStore(), network, logger = silent } = {}) {
   const gladys = createFakeGladys();
   const net = network ?? createFakeWallNetwork();
   const clock = { t: Date.parse('2026-10-10T08:00:00Z') };
   const runtime = createRuntime({
     gladys,
     store,
-    logger: silent,
+    logger,
     wallClientFactory: net.factory,
     now: () => clock.t,
   });
@@ -469,6 +469,158 @@ test('an unreachable charger: flagged after 3 missed reads, back when it answers
   await poll();
   assert.equal(gladys.last(`${EU}:connector-status`), 0);
   assert.equal(euTransport(), 'local');
+  await runtime.stop();
+});
+
+// The core never calls onPoll for these devices (`should_poll: false`; and a
+// device created without `should_poll` is never polled, Gladys#3198): the
+// container's own timer must read the chargers and publish.
+// Lets the asynchronous work started by a timer run; fails instead of hanging.
+async function waitFor(condition, what) {
+  for (let i = 0; i < 1000; i += 1) {
+    if (condition()) return;
+    await new Promise(setImmediate);
+  }
+  assert.fail(`timed out waiting for ${what}`);
+}
+
+test(
+  'the states reach Gladys from the internal timer, without any onPoll',
+  { timeout: 5000 },
+  async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const { gladys, runtime, net } = await setup();
+    assert.ok(gladys.discovered.every((d) => d.should_poll === false && !d.poll_frequency));
+    const vitalsReads = net.count(WC_HOSTS.EU, 'vitals');
+    net.set(WC_HOSTS.EU, { vitals: wcFixture('vitals_eu_charging') });
+    t.mock.timers.tick(WALL_CONNECTOR_POLL_MS);
+    await waitFor(() => gladys.last(`${EU}:connector-status`) === 1, 'the timer to publish');
+    assert.equal(net.count(WC_HOSTS.EU, 'vitals'), vitalsReads + 1, 'one read per tick');
+    t.mock.timers.tick(WALL_CONNECTOR_POLL_MS);
+    await waitFor(() => net.count(WC_HOSTS.EU, 'vitals') === vitalsReads + 2, 'a second read');
+    await runtime.stop();
+    assert.equal(net.count(WC_HOSTS.EU, 'vitals'), vitalsReads + 2);
+    t.mock.timers.tick(WALL_CONNECTOR_POLL_MS * 4);
+    assert.equal(net.count(WC_HOSTS.EU, 'vitals'), vitalsReads + 2, 'stopped: no more reads');
+  },
+);
+
+test('the fallback onPoll republishes the known values without reading the charger', async () => {
+  const { gladys, runtime, net } = await setup();
+  const reads = net.calls.length;
+  const before = gladys.published.length;
+  await runtime.poll({ external_id: EU });
+  assert.equal(net.calls.length, reads, 'no request to the charger');
+  assert.ok(gladys.published.length > before);
+  await runtime.stop();
+});
+
+function recordingLogger() {
+  const lines = [];
+  const at = (level) => (message) => lines.push({ level, message: String(message) });
+  return {
+    lines,
+    debug: at('debug'),
+    info: at('info'),
+    warn: at('warn'),
+    error: at('error'),
+    above: (levels) => lines.filter((l) => levels.includes(l.level)),
+  };
+}
+
+test('logs: a normal day writes nothing above debug', async () => {
+  const logger = recordingLogger();
+  const { runtime, net, poll } = await setup({ logger });
+  logger.lines.length = 0;
+  for (const name of ['vitals_eu_charging', 'vitals_eu_finished', 'vitals_eu_unplugged']) {
+    net.set(WC_HOSTS.EU, { vitals: wcFixture(name) });
+    for (let i = 0; i < 8; i += 1) await poll();
+  }
+  // One slow answer, common on this firmware, is no outage.
+  net.set(WC_HOSTS.EU, { offline: true });
+  await poll();
+  net.set(WC_HOSTS.EU, { offline: false });
+  await poll();
+  assert.deepEqual(logger.above(['info', 'warn', 'error']), []);
+  assert.ok(
+    logger.lines.some((l) => l.message.includes('Scene trigger')),
+    'kept in debug',
+  );
+  await runtime.stop();
+});
+
+test('logs: an outage is one warning, its end one line, whatever its length', async () => {
+  const logger = recordingLogger();
+  const { gladys, runtime, net, poll } = await setup({ logger });
+  logger.lines.length = 0;
+  net.set(WC_HOSTS.EU, { offline: true });
+  for (let i = 0; i < 20; i += 1) await poll();
+  net.set(WC_HOSTS.EU, { offline: false });
+  await poll();
+  await poll();
+  assert.deepEqual(
+    logger.above(['info', 'warn', 'error']).map((l) => l.level),
+    ['warn', 'info'],
+  );
+  assert.match(logger.above(['warn'])[0].message, /192\.0\.2\.10/);
+  // Gladys refusing the states: same rule.
+  logger.lines.length = 0;
+  const publishStates = gladys.publishStates;
+  gladys.publishStates = async () => {
+    throw new Error('Gladys is restarting');
+  };
+  for (const name of ['vitals_eu_charging', 'vitals_eu_finished', 'vitals_eu_unplugged']) {
+    net.set(WC_HOSTS.EU, { vitals: wcFixture(name) });
+    await poll();
+  }
+  gladys.publishStates = publishStates;
+  net.set(WC_HOSTS.EU, { vitals: wcFixture('vitals_eu_charging') });
+  await poll();
+  assert.deepEqual(
+    logger.above(['info', 'warn', 'error']).map((l) => l.level),
+    ['warn', 'info'],
+  );
+  await runtime.stop();
+});
+
+test('logs: an address that never answered is reported at once, once', async () => {
+  const logger = recordingLogger();
+  const network = createFakeWallNetwork();
+  network.set(WC_HOSTS.NA, { offline: true });
+  const { runtime, poll } = await setup({ logger, network });
+  for (let i = 0; i < 5; i += 1) await poll();
+  const warnings = logger.above(['warn']).filter((l) => l.message.includes(WC_HOSTS.NA));
+  assert.equal(warnings.length, 1);
+  await runtime.stop();
+});
+
+test('logs: a known charger slow at a restart is no outage', async () => {
+  const first = await setup();
+  await first.runtime.stop();
+  const logger = recordingLogger();
+  const network = createFakeWallNetwork();
+  network.set(WC_HOSTS.EU, { offline: true });
+  const { runtime, poll } = await setup({ logger, network, store: first.store });
+  network.set(WC_HOSTS.EU, { offline: false });
+  await poll();
+  assert.deepEqual(logger.above(['info', 'warn', 'error']), []);
+  await runtime.stop();
+});
+
+test('an answer without serial number is not kept: nothing stored in /data without a serial', async () => {
+  const network = createFakeWallNetwork();
+  network.other('192.0.2.20', {
+    version: {},
+    vitals: wcFixture('vitals_eu_unplugged'),
+    lifetime: wcFixture('lifetime'),
+  });
+  const { runtime, store, poll } = await setup({
+    network,
+    config: { wall_connectors: '192.0.2.20' },
+  });
+  await poll();
+  await poll();
+  assert.deepEqual(Object.keys(store.data.wallConnectors), []);
   await runtime.stop();
 });
 
