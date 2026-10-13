@@ -5,7 +5,8 @@
 //   - vitals every 15 s, lifetime counters every minute, from the container
 //     itself (no device asks for the core's poll: 15 s is in its list, but a
 //     charger answering slowly would then make the core wait on it);
-//   - a charger is flagged "unreachable" after 3 missed reads in a row;
+//   - a charger is flagged "unreachable" after 3 missed reads in a row; the
+//     logs say it once per outage, and once when it answers again;
 //   - the chargers are read in parallel, so a slow one delays nobody.
 // This started as the Wall Connector part of the Tesla integration 1.1.0; it
 // adds the search for chargers on the network (src/wallConnector/scan.js), the
@@ -90,6 +91,9 @@ export function createRuntime({
   const wallConnectors = new Map();
   let wallTimer = null;
   let wallPolling = null;
+  // Gladys refusing the states (disconnected, restarting): one warning when it
+  // starts, one line when it accepts them again, not one per read.
+  let publishFailing = false;
 
   // --- Helpers ---------------------------------------------------------------
 
@@ -183,9 +187,18 @@ export function createRuntime({
         for (const { externalId, serialized, value } of batch) {
           published.set(externalId, { serialized, value, at });
         }
+        if (publishFailing) {
+          publishFailing = false;
+          logger.info('Gladys accepts the states again');
+        }
       } catch (err) {
         // Not remembered: the next change (or reconnection) sends it again.
-        logger.warn(`Publishing ${batch.length} state(s) failed: ${err.message}`);
+        const line = `Publishing ${batch.length} state(s) failed: ${err.message}`;
+        if (publishFailing) logger.debug(line);
+        else {
+          publishFailing = true;
+          logger.warn(line);
+        }
       }
     }
     return changed.length;
@@ -253,7 +266,7 @@ export function createRuntime({
     for (const key of keys) {
       try {
         await gladys.publishSceneEvent(key, data);
-        logger.info(`Scene trigger ${key} fired for ${data.device}`);
+        logger.debug(`Scene trigger ${key} fired for ${data.device}`);
       } catch (err) {
         logger.warn(`Scene trigger ${key} failed: ${err.message}`);
       }
@@ -354,10 +367,13 @@ export function createRuntime({
   async function pollWallConnector(wc) {
     try {
       if (!wc.version) {
-        wc.version = await wc.client.version();
-        if (!wc.version?.serial_number) throw new Error('no serial number in /api/1/version');
+        // Kept only once it has a serial number: without one, the charger
+        // would be stored under an "undefined" key in /data.
+        const version = await wc.client.version();
+        if (!version?.serial_number) throw new Error('no serial number in /api/1/version');
+        wc.version = version;
         const known = wc.serial;
-        wc.serial = String(wc.version.serial_number);
+        wc.serial = String(version.serial_number);
         if (known !== wc.serial) logger.info(`Wall Connector found at ${wc.host}`);
       }
       const vitals = await wc.client.vitals();
@@ -367,6 +383,10 @@ export function createRuntime({
         wc.lastLifetimeAt = now();
       }
       wc.failures = 0;
+      if (wc.outageLogged) {
+        wc.outageLogged = false;
+        logger.info(`Wall Connector ${wc.host} answers again`);
+      }
       const firstValues = !wc.vitals;
       await applyWallConnector(wc, { vitals, energyWh, reachable: true });
       // The structure follows the grid (°F on a 60 Hz supply in "auto"), and a
@@ -375,9 +395,18 @@ export function createRuntime({
       return true;
     } catch (err) {
       wc.failures += 1;
-      if (wc.failures === 1 || wc.failures === WALL_CONNECTOR_MAX_FAILURES) {
-        logger.warn(`Wall Connector ${wc.host}: ${err.message}`);
-      }
+      // One warning per outage: when the charger is flagged unreachable, or at
+      // once for an address never seen (a typo in the settings). A single slow
+      // answer, common on this firmware, stays in debug, also for a known
+      // charger right after a restart.
+      const line = err.message.includes(wc.host)
+        ? err.message
+        : `Wall Connector ${wc.host}: ${err.message}`;
+      const neverSeen = !wc.serial && wc.reachable === undefined;
+      if (!wc.outageLogged && (wc.failures >= WALL_CONNECTOR_MAX_FAILURES || neverSeen)) {
+        wc.outageLogged = true;
+        logger.warn(line);
+      } else logger.debug(line);
       if (wc.serial && wc.failures >= WALL_CONNECTOR_MAX_FAILURES && wc.reachable !== false) {
         await applyWallConnector(wc, { reachable: false });
       }
@@ -418,6 +447,7 @@ export function createRuntime({
         energyKwh: serial ? (persistedWallConnectors()[serial]?.energyKwh ?? null) : null,
         reachable: undefined,
         failures: 0,
+        outageLogged: false,
         lastLifetimeAt: 0,
       });
     }

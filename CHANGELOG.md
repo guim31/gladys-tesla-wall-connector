@@ -10,6 +10,21 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+### Changed
+
+- Quieter logs: a charger that stops answering is reported once, when it is
+  flagged unreachable (at once for an address never seen), then once when it
+  answers again, instead of a line on the first and third missed read
+  of every outage. Gladys refusing the states (while it restarts) is one
+  warning and one line when it accepts them again. A single slow answer and
+  the scene triggers fired only show at debug level (`LOG_LEVEL=debug`).
+- Gladys integration SDK 0.15 and up-to-date development tools.
+
+### Fixed
+
+- A device answering at a charger's address without a serial number is no
+  longer remembered in the saved state under an empty name.
+
 ## [1.3.0] - 2026-10-11
 
 ### Changed

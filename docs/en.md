@@ -244,5 +244,6 @@ used the Tesla integration for the charger, you can uninstall it.
 - **The charger answers slowly**: common with this firmware; the integration
   waits up to 10 seconds and only flags it unreachable after three failures in
   a row.
-- The integration logs what it does (searches, charger answers): open
-  its logs from the integration's tab in Gladys.
+- The integration logs what matters (start, searches, a charger that stops
+  answering and when it answers again), not every read: open its logs from the
+  integration's tab in Gladys.
