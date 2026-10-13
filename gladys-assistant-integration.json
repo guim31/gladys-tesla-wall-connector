@@ -8,8 +8,8 @@
     "de": "Tesla Wall Connector Gen 3, im lokalen Netzwerk gelesen: Leistung, Energie, Ladestatus.",
     "es": "Tesla Wall Connector gen 3 leído en su red local: potencia, energía, estado de carga."
   },
-  "version": "1.3.0",
-  "docker_image": "ghcr.io/guim31/gladys-tesla-wall-connector:1.3.0",
+  "version": "1.3.1",
+  "docker_image": "ghcr.io/guim31/gladys-tesla-wall-connector:1.3.1",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/guim31/gladys-tesla-wall-connector/main/cover.png",
   "categories": ["energy"],

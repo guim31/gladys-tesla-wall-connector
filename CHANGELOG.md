@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-13
+
 ### Changed
 
 - Quieter logs: a charger that stops answering is reported once, when it is
@@ -118,7 +120,8 @@ the notes of the version's GitHub Release.
   the same feature, trigger and widget keys; the documentation explains how to
   move a charger from one integration to the other.
 
-[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/guim31/gladys-tesla-wall-connector/compare/v1.0.1...v1.1.0
